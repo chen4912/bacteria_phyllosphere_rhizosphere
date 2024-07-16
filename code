@@ -1,1 +1,2345 @@
+############packages##########
+library(lme4)
+library(nlme)
+library(lmerTest)
+library(openxlsx)
+library(ggplot2)
+library(vegan)
+library(tidyverse)
+library(ggalt)
+library(patchwork)
+library(NST)
+library(ggpmisc)
+library(reshape2)
+library(ggprism)
+library(ggpubr)
+library(ggplot2) 
+library(reshape)
+library(ggalluvial)
+library(dplyr)
+library(ggh4x)
+library(car)
+library(sjPlot)
+library(performance)
+library(MuMIn)
+library(mgcv)
+library(emmeans)
+library(multcomp)
+library(stringr)
+library(dplyr)
+library(gamm4)
+library(Matrix)
+library(ggthemes)
+library(tidyr)
+library(glmm.hp)
+library(partR2)
+library(corrplot)
+library(gratia)
+#############functions##################
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE),
+      se = sd(x[[col]]/sqrt(length(x[[col]]))))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+  return(data_sum)
+} 
+
+merge_otu_data <- function(x, y) {
+  merged_data <- merge(x, y, by = "row.names", all = TRUE)
+  rownames(merged_data) <- merged_data$Row.names
+  merged_data$Row.names <- NULL
+  merged_data[is.na(merged_data)] <- 0
+  return(merged_data)
+}
+
+################################analysis####################
+getwd()
+setwd("D:/桌面/phyllosphere_rhizosphere/data/")
+###field analysisi
+set.seed(1234)
+diversity <- read.xlsx("total_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+diversity$month <- factor(diversity$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+vf1 <- varIdent(form = ~1|compartment)
+
+model <- lme(log(OTUs.of.total) ~ species * compartment * month,random = list(elevation = pdDiag(~1)), 
+             na.action= na.omit,method = "ML",weights = vf1, data = diversity)
+car::Anova(model, type = 2)
+
+model <- lme(OTUs ~ species * compartment * month,random = list(elevation = pdDiag(~1)), 
+             na.action= na.omit,method = "ML",weights = vf1, data = diversity)
+car::Anova(model, type = 2)
+
+model <- lme(reads ~ species * compartment * month,random = list(elevation = pdDiag(~1)), 
+             na.action= na.omit,method = "ML",weights = vf1, data = diversity)
+car::Anova(model, type = 2)
+
+###random effect is pair
+model <- lmer(log(OTUs.of.total) ~ species * compartment * month + (1|pair)+(1|elevation), 
+              na.action= na.omit, data = diversity)
+car::Anova(model, type = 2)
+ranova(model)
+
+model <- lmer(OTUs ~ species * compartment * month + (1|pair)+(1|elevation), 
+              na.action= na.omit, data = diversity)
+car::Anova(model, type = 2)
+ranova(model)
+
+model <- lmer(reads ~ species * compartment * month + (1|pair)+(1|elevation), 
+              na.action= na.omit, data = diversity)
+car::Anova(model, type = 2)
+ranova(model)
+
+####species & env in leaf and root
+library(openxlsx)
+library(tidyverse)
+library(vegan)
+set.seed(1234)
+total <- read.xlsx("entire_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1 <- subset(group, compartment == "L")
+data <- total[rownames(total) %in% rownames(group1),]
+wunifrac <- data[,colnames(data) %in% rownames(group1),]
+with(group1, adonis2(wunifrac ~ species+pH+STN+SLA+Chl+AM+AT+
+                       species:pH+species:STN+species:SLA+
+                       species:Chl+species:AM+species:AT,
+                     data = group1, permutations = 999,strata = elevation))
+
+group1 <- subset(group, compartment == "R")
+data <- total[rownames(total) %in% rownames(group1),]
+wunifrac <- data[,colnames(data) %in% rownames(group1),]
+with(group1, adonis2(wunifrac ~ species+pH+STN+SLA+Chl+AM+AT+
+                       species:pH+species:STN+species:SLA+
+                       species:Chl+species:AM+species:AT,
+                     data = group1, permutations = 999,strata = elevation))
+
+#####env & compartment
+total <- read.xlsx("total_field.xlsx", sheet = "bray",colNames = T, rowNames = T)
+group <- read.xlsx("total_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair+species+compartment+pH+AT+AM+STN+SLA+Chl+
+                      compartment:pH+compartment:AT+compartment:AM+compartment:STN+
+                      compartment:SLA+compartment:Chl,
+                    data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("total_field.xlsx", sheet = "sorensen",colNames = T, rowNames = T)
+group <- read.xlsx("total_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair+species+compartment+pH+AT+AM+STN+SLA+Chl+
+                      compartment:pH+compartment:AT+compartment:AM+compartment:STN+
+                      compartment:SLA+compartment:Chl,
+                    data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("total_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("total_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair+species+compartment+pH+AT+AM+STN+SLA+Chl+
+                      compartment:pH+compartment:AT+compartment:AM+compartment:STN+
+                      compartment:SLA+compartment:Chl,
+                    data = group, permutations = 999))
+
+total <- read.xlsx("total_field.xlsx", sheet = "unifrac",colNames = T, rowNames = T)
+group <- read.xlsx("total_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair+species+compartment+pH+AT+AM+STN+SLA+Chl+
+                      compartment:pH+compartment:AT+compartment:AM+compartment:STN+
+                      compartment:SLA+compartment:Chl,
+                    data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("shared_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair+species+compartment+pH+AT+AM+STN+SLA+Chl+
+                      compartment:pH+compartment:AT+compartment:AM+compartment:STN+
+                      compartment:SLA+compartment:Chl,
+                    data = group, permutations = 999, strata = elevation))
+
+
+total <- read.csv("unique_wunifrac.csv",header = T, row.names = 1)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair + species+compartment+pH+AT+AM+STN+SLA+Chl+
+                      compartment:pH+compartment:AT+compartment:AM+compartment:STN+
+                      compartment:SLA+compartment:Chl,
+                    data = group, permutations = 999, strata = elevation))
+
+#####total
+total <- read.xlsx("entire_field.xlsx", sheet = "bray",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group$elevation <- as.factor(group$elevation)
+with(group, adonis2(total ~ pair + month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("entire_field.xlsx", sheet = "sorensen",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair + month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("entire_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair + month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("entire_field.xlsx", sheet = "unifrac",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair + month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+#####shared
+total <- read.xlsx("shared_field.xlsx", sheet = "bray",colNames = T, rowNames = T)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * position, data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("shared_field.xlsx", sheet = "sorensen",colNames = T, rowNames = T)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * position, data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("shared_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.xlsx("shared_field.xlsx", sheet = "unifrac",colNames = T, rowNames = T)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * position, data = group, permutations = 999, strata = elevation))
+
+#####unique
+total <- read.csv("unique_bray.csv",header = T, row.names = 1)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.csv("unique_sorensen.csv",header = T, row.names = 1)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.csv("unique_wunifrac.csv",header = T, row.names = 1)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+total <- read.csv("unique_unifrac.csv",header = T, row.names = 1)
+group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+with(group, adonis2(total ~ pair +month * species * compartment, data = group, permutations = 999, strata = elevation))
+
+###transplantatioan analysis
+library(nlme)
+library(lmerTest)
+library(openxlsx)
+diversity <- read.xlsx("trans_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+diversity$site <- as.factor(diversity$site)
+diversity$popu <- as.factor(diversity$popu)
+diversity$soilsource <- as.factor(diversity$soilsource)
+
+####random effect is pair
+model <- lmer(log(OTUs.of.total) ~ soilsource * site * compartment * species * popu + (1|pair), 
+              na.action= na.omit,data = diversity)
+car::Anova(model, type = 2)
+ranova(model)
+
+model <- lmer(OTUs ~ soilsource * site * compartment * species * popu + (1|pair), 
+              na.action= na.omit,data = diversity)
+car::Anova(model, type = 2)
+ranova(model)
+
+model <- lmer(reads ~ soilsource * site * compartment * species * popu + (1|pair), 
+              na.action= na.omit,data = diversity)
+car::Anova(model, type = 2)
+ranova(model)
+###permanova analysis
+rm(list=ls())
+library(vegan)
+library(openxlsx)
+trans <- read.xlsx("trans_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group1 <- read.xlsx("trans_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1$site <- as.factor(group1$site)
+group1$popu <- as.factor(group1$popu)
+group1$soil <- as.factor(group1$soil)
+with(group1, adonis2(trans ~ pair + site * soilsource * species * compartment * popu, 
+                     data = group1, permutations = 999))
+
+trans <- read.xlsx("shared_trans.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group1 <- read.xlsx("shared_trans.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1$site <- as.factor(group1$site)
+group1$popu <- as.factor(group1$popu)
+group1$soil <- as.factor(group1$soil)
+with(group1, adonis2(trans ~ pair + site * soilsource * species * compartment * popu, 
+                     data = group1, permutations = 999))
+
+trans <- read.csv("trans_unique_wunifrac.csv", header = T, row.names = 1)
+group1 <- read.xlsx("shared_trans.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1$site <- as.factor(group1$site)
+group1$popu <- as.factor(group1$popu)
+group1$soil <- as.factor(group1$soil)
+with(group1, adonis2(trans ~ pair + site * soilsource * species * compartment * popu, 
+                     data = group1, permutations = 999))
+
+trans <- read.xlsx("trans_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group1 <- read.xlsx("trans_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group2 <- subset(group1, compartment == "L")
+data <- trans[rownames(trans) %in% rownames(group2),]
+wunifrac <- data[,colnames(data) %in% rownames(group2),]
+group2$site <- as.factor(group2$site)
+group2$popu <- as.factor(group2$popu)
+group2$soil <- as.factor(group2$soil)
+model <- adonis2(wunifrac ~ soilsource * site * species * popu, 
+                 data = group2, permutations = 9999)
+
+group2 <- subset(group1, compartment == "R")
+data <- trans[rownames(trans) %in% rownames(group2),]
+wunifrac <- data[,colnames(data) %in% rownames(group2),]
+group2$site <- as.factor(group2$site)
+group2$popu <- as.factor(group2$popu)
+group2$soil <- as.factor(group2$soil)
+model <- adonis2(wunifrac ~ soilsource * site * species * popu, 
+                 data = group2, permutations = 9999)
+
+Low_Mid <- subset(group1, compartment == "R" &
+                    site == "L" & popu == "L")
+data <- trans[rownames(trans) %in% rownames(Low_Mid),]
+wunifrac <- data[,colnames(data) %in% rownames(Low_Mid),]
+Low_Mid$site <- as.factor(Low_Mid$site)
+Low_Mid$popu <- as.factor(Low_Mid$popu)
+Low_Mid$soil <- as.factor(Low_Mid$soil)
+model <- adonis2(wunifrac ~ soilsource * species, 
+                 data = Low_Mid, permutations = 9999)
+
+########Fig 1##########
+diversity <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+diversity$logOTUs.of.total <- log(diversity$OTUs.of.total)
+df2 <- data_summary(diversity, varname = "logOTUs.of.total",groupnames = c("compartment","month","species"))
+df2$month <- factor(df2$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+ggplot()+
+  geom_line(data = df2,mapping = aes(x=month,y=logOTUs.of.total,group= compartment),color="black",
+            show.legend = FALSE,size = 0.5)+
+  geom_errorbar(data = df2,mapping = aes(x=month,y=logOTUs.of.total,ymin=logOTUs.of.total-se,
+                                         ymax=logOTUs.of.total+se,color=compartment),
+                width=0,size = 0.5)+
+  geom_jitter(data = diversity,mapping = aes(x=month,y=logOTUs.of.total,shape=compartment,color = compartment),
+              size=1,width =0.03,alpha = 0.2)+
+  geom_point(data = df2,mapping = aes(x=month,y=logOTUs.of.total,color=compartment,shape = compartment),size=2,width =0.3)+
+  scale_shape_manual(values = c("L"=16,
+                                "R"=16))+
+  scale_color_manual(values = c("L"="#108b96" ,
+                                "R"="#7A8234"))+
+  labs(y="No. of total OTUs (log)")+
+  theme_classic()+
+  theme(axis.title = element_text(color='black',size=12),
+        axis.title.x=element_text(colour='black', size=12,vjust = 0),
+        axis.title.y=element_text(colour='black', size=12,vjust = 0),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.key=element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(colour = "black"))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank())-> p1a;p1a
+
+df2 <- data_summary(diversity, varname = "OTUs",groupnames = c("compartment","month","species"))
+df2$month <- factor(df2$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+ggplot()+
+  geom_line(data = df2,mapping = aes(x=month,y=OTUs,group= compartment),color="black",
+            show.legend = FALSE,size = 0.5)+
+  geom_errorbar(data = df2,mapping = aes(x=month,y=OTUs,ymin=OTUs-se,
+                                         ymax=OTUs+se,color=compartment),
+                width=0,size = 0.5)+
+  geom_jitter(data = diversity,mapping = aes(x=month,y=OTUs,shape=compartment,color = compartment),
+              size=1,width =0.03,alpha = 0.2)+
+  geom_point(data = df2,mapping = aes(x=month,y=OTUs,color=compartment,shape = compartment),size=2,width =0.3)+
+  scale_shape_manual(values = c("L"=16,
+                                "R"=16))+
+  scale_color_manual(values = c("L"="#108b96" ,
+                                "R"="#7A8234"))+
+  labs(y="% OTUs shared")+
+  theme_classic()+
+  theme(axis.title = element_text(color='black',size=12),
+        axis.title.x=element_text(colour='black', size=12,vjust = 0),
+        axis.title.y=element_text(colour='black', size=12,vjust = 0),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 10,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.key=element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(colour = "black"))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank())-> p1b;p1b
+
+df2 <- data_summary(diversity, varname = "reads",groupnames = c("compartment","month","species"))
+df2$month <- factor(df2$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+ggplot()+
+  geom_line(data = df2,mapping = aes(x=month,y=reads,group= compartment),color="black",
+            show.legend = FALSE,size = 0.5)+
+  geom_errorbar(data = df2,mapping = aes(x=month,y=reads,ymin=reads-se,
+                                         ymax=reads+se,color=compartment),
+                width=0,size = 0.5)+
+  geom_jitter(data = diversity,mapping = aes(x=month,y=reads,shape=compartment,color = compartment),
+              size=1,width =0.03,alpha = 0.2)+
+  geom_point(data = df2,mapping = aes(x=month,y=reads,color=compartment,shape = compartment),size=2,width =0.3)+
+  scale_shape_manual(values = c("L"=16,
+                                "R"=16))+
+  scale_color_manual(values = c("L"="#108b96" ,
+                                "R"="#7A8234"))+
+  labs(y="RA of shared OTUs (%)")+
+  theme_classic()+
+  theme(axis.title = element_text(color='black',size=12),
+        axis.title.x=element_text(colour='black', size=12,vjust = 0),
+        axis.title.y=element_text(colour='black', size=12,vjust = 0),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 10,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.key=element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(colour = "black"))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank())-> p1c;p1c
+
+library(patchwork)
+layout <- "
+AAAAAA
+BBBBBB
+CCCCCC
+"
+p1a + p1b + p1c + 
+  plot_layout(design = layout)
+
+#########################Fig 2#################
+###Using field survey data as an example
+entire_dis <- read.xlsx("entire_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+leaf1 <- subset(group, compartment == "L")
+data <- entire_dis[rownames(entire_dis) %in% rownames(leaf1),]
+leaf <- data[,colnames(data) %in% rownames(leaf1)]
+pcoa <- cmdscale(leaf, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+group$SampleID <- rownames(group)
+sample_site <- merge(pcoa,group)
+df <- aggregate(cbind(PCoA1, PCoA2) ~ month, sample_site, FUN = mean)
+colnames(df)[c(2,3)] = c("PCoA1_mean","PCoA2_mean")
+sample_site$type = paste0(sample_site$month)
+df$type = paste0(df$month)
+sample_site2 = sample_site %>% left_join(df[,c(2:4)], by = "type")
+df_line <- aggregate(cbind(PCoA1, PCoA2) ~ month, sample_site, mean)
+colnames(df_line)[c(2,3)] = c("PCoA1_line","PCoA2_line")
+sample_site2$month <- factor(sample_site2$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+df$month <- factor(df$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+custom_order <- c("Sep","Oct","Dec","Jun","Aug")
+df_sorted <- df_line[order(match(df_line$month, custom_order)), ]
+df_sorted$month <- factor(df_line$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(sample_site2,mapping = aes(PCoA1, PCoA2), size = 1, color = "gray80")+
+  #geom_segment(sample_site2,mapping = aes(x = PCoA1_mean, y = PCoA2_mean, xend = PCoA1, yend = PCoA2),
+  #            linetype = 2, size = 0.1, color = "grey90")+
+  geom_point(df,mapping = aes(PCoA1_mean, PCoA2_mean, 
+                              fill = month), size = 2.5,alpha = 1,shape = 21)+
+  geom_point(df_sorted,mapping = aes(PCoA1_line, PCoA2_line), color = NA, size = 2.5)+
+  #scale_color_manual(values = c("#6D6D67","#F6B36F","#B84B24")) +
+  scale_fill_manual(values = c("#EEE90A","#32B40E","#7E549A","#3B528B","#21908C")) +
+  geom_encircle(data=sample_site2,mapping = aes(PCoA1, PCoA2,group = month,fill=month),expand=0,spread=0.5,
+                s_shape=1,size=1,linetype = 1,alpha=0.4)+
+  geom_curve(df_sorted,mapping = aes(x = lag(PCoA1_line), y = lag(PCoA2_line), xend = PCoA1_line, yend = PCoA2_line),
+             curvature = 0.3, arrow = arrow(length = unit(0.2, "cm")),size = 0.5) +
+  scale_size_continuous(name = "elevation", range = c(0.5, 2))+
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+  #标题居中
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.2)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.2)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01)) -> p2a;p2a
+
+root1 <- subset(group, compartment == "R")
+data <- entire_dis[rownames(entire_dis) %in% rownames(root1),]
+root <- data[,colnames(data) %in% rownames(root1)]
+pcoa <- cmdscale(root, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+group$SampleID <- rownames(group)
+sample_site <- merge(pcoa,group)
+df <- aggregate(cbind(PCoA1, PCoA2) ~ month, sample_site, FUN = mean)
+colnames(df)[c(2,3)] = c("PCoA1_mean","PCoA2_mean")
+sample_site$type = paste0(sample_site$month)
+df$type = paste0(df$month)
+sample_site2 = sample_site %>% left_join(df[,c(2:4)], by = "type")
+df_line <- aggregate(cbind(PCoA1, PCoA2) ~ month, sample_site, mean)
+colnames(df_line)[c(2,3)] = c("PCoA1_line","PCoA2_line")
+sample_site2$month <- factor(sample_site2$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+df$month <- factor(df$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+custom_order <- c("Sep","Oct","Dec","Jun","Aug")
+df_sorted <- df_line[order(match(df_line$month, custom_order)), ]
+df_sorted$month <- factor(df_line$month,levels = c("Sep","Oct","Dec","Jun","Aug"))
+ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(sample_site2,mapping = aes(PCoA1, PCoA2), size = 1, color = "gray80")+
+  #geom_segment(sample_site2,mapping = aes(x = PCoA1_mean, y = PCoA2_mean, xend = PCoA1, yend = PCoA2),
+  #            linetype = 2, size = 0.1, color = "grey90")+
+  geom_point(df,mapping = aes(PCoA1_mean, PCoA2_mean, 
+                              fill = month), size = 2.5,alpha = 1,shape = 21)+
+  geom_point(df_sorted,mapping = aes(PCoA1_line, PCoA2_line), color = NA, size = 2.5)+
+  #scale_color_manual(values = c("#6D6D67","#F6B36F","#B84B24")) +
+  scale_fill_manual(values = c("#EEE90A","#32B40E","#7E549A","#3B528B","#21908C")) +
+  geom_encircle(data=sample_site2,mapping = aes(PCoA1, PCoA2,group = month,fill=month),expand=0,spread=0.5,
+                s_shape=1,size=1,linetype = 1,alpha=0.4)+
+  geom_curve(df_sorted,mapping = aes(x = lag(PCoA1_line), y = lag(PCoA2_line), xend = PCoA1_line, yend = PCoA2_line),
+             curvature = 0.3, arrow = arrow(length = unit(0.2, "cm")),size = 0.5) +
+  scale_size_continuous(name = "elevation", range = c(0.5, 2))+
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+  #标题居中
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.2)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.2)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01)) -> p2b;p2b
+
+###p2c
+data <- read.xlsx("entire_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1 <- group[,c(3,5,6,7,21)]
+group1$group <- rownames(group)
+data_3col=dist.3col(data)
+colnames(data_3col) <- c("group", "group2", "distance")
+data1 <- dplyr::left_join(data_3col,group1, by = "group")
+group2 <- group[,c(3,5,6,7,21)]
+group2$group2 <- rownames(group)
+data3 <- dplyr::left_join(data1, group2, by = "group2")
+#data2$species <- ifelse(data2$species.x == data2$species.y, data2$species.x, 0)
+#data3 <- subset(data2, species != 0)
+
+data3$position <- ifelse(data3$compartment.x == data3$compartment.y, data3$compartment.x, 0)
+data4 <- subset(data3, position != 0)
+
+data4$elevation <- ifelse(data4$elevation.x == data4$elevation.y, data4$elevation.x, 0)
+data5 <- subset(data4, elevation != 0)
+
+data5$AT <- abs(data5$AT.x - data5$AT.y)
+
+leaf <- subset(data5, position == "L")
+root <- subset(data5, position == "R")
+
+cor.test(leaf$AT,leaf$distance)
+cor.test(root$AT,root$distance)
+data5$position = factor(data5$position, levels = c("L","R"))
+ggplot()+
+  geom_jitter(data = dplyr::filter(data5, position == 'R'), 
+              aes(x = AT, y = distance), width = 0.3,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3,color = "#7A8234", alpha = 0.2,
+              show.legend = FALSE)+
+  geom_jitter(data = dplyr::filter(data5, position == 'L'), 
+              aes(x = AT, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3,color = "#108b96", alpha = 0.2,
+              show.legend = FALSE)+
+  stat_smooth(data = dplyr::filter(data5, position == 'L'),
+              mapping = aes(AT,distance),
+              method = "lm",
+              formula = y ~ x,
+              se = T,
+              linewidth = 0.5,
+              color = c("#108b96"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  stat_smooth(data = dplyr::filter(data5, position == 'R'),
+              mapping = aes(AT,distance),
+              method = "lm",
+              formula = y ~ x,
+              se = T,
+              linewidth = 0.5,
+              color = c("#7A8234"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  scale_color_manual(values = c("#108b96","#7A8234" )) + 
+  labs(x = "Difference in air temperature", y = "Compositional dissimilarity", tag = "d")+
+  #stat_poly_eq(data = dplyr::filter(data5, position == 'L'),
+  #            mapping = aes(AT,distance,group = factor(position,levels = c("L",'R')),
+  #                         color = factor(position,levels = c("L",'R')),
+  #                        label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #         formula = y ~ x, parse = TRUE)+
+  #stat_poly_eq(data = dplyr::filter(data5, position == 'R'),
+  #            mapping = aes(AT,distance,group = factor(position,levels = c("L",'R')),
+  #                         color = factor(position,levels = c("L",'R')),
+  #                        label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #         formula = y ~ x, parse = TRUE)+
+  theme_bw()+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01)) +
+  theme(panel.grid.major=element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(size=10, color="black"),
+        axis.text.y = element_text(color = "black",size = 10),
+        panel.grid.minor=element_blank(),
+        axis.title.y=element_text(color = "black",size = 12),
+        axis.title.x=element_text(color = "black",size = 12)) -> p2c; p2c
+
+###p2d
+group1 <- group[,c(3,5,6,7,24)]
+group1$group <- rownames(group)
+data_3col=dist.3col(data)
+colnames(data_3col) <- c("group", "group2", "distance")
+data1 <- dplyr::left_join(data_3col,group1, by = "group")
+group2 <- group[,c(3,5,6,7,24)]
+group2$group2 <- rownames(group)
+data3 <- dplyr::left_join(data1, group2, by = "group2")
+#data2$species <- ifelse(data2$species.x == data2$species.y, data2$species.x, 0)
+#data3 <- subset(data2, species != 0)
+
+data3$position <- ifelse(data3$compartment.x == data3$compartment.y, data3$compartment.x, 0)
+data4 <- subset(data3, position != 0)
+
+data4$elevation <- ifelse(data4$elevation.x == data4$elevation.y, data4$elevation.x, 0)
+data5 <- subset(data4, elevation != 0)
+
+data5$Chl <- abs(data5$Chl.x - data5$Chl.y)
+
+leaf <- subset(data5, position == "L")
+root <- subset(data5, position == "R")
+
+cor.test(leaf$Chl,leaf$distance)
+cor.test(root$Chl,root$distance)
+ggplot()+
+  geom_jitter(data = dplyr::filter(data5, position == 'R'), 
+              aes(x = Chl, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3,color = "#7A8234" , alpha = 0.2,
+              show.legend = FALSE)+
+  geom_jitter(data = dplyr::filter(data5, position == 'L'), 
+              aes(x = Chl, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3,color = "#108b96", alpha = 0.2,
+              show.legend = FALSE)+
+  stat_smooth(data = dplyr::filter(data5, position == 'L'),
+              mapping = aes(Chl,distance),
+              method = "lm",
+              formula = y ~ x,
+              se = T,
+              linewidth = 0.5,
+              color = c("#108b96"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  stat_smooth(data = dplyr::filter(data5, position == 'R'),
+              mapping = aes(Chl,distance),
+              method = "lm",
+              formula = y ~ x,
+              se = T,
+              linewidth = 0.5,
+              color = c("#7A8234"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  scale_color_manual(values = c("#108b96","#7A8234" )) +
+  labs(x = "Difference in chlorophyll content", y = "Compositional dissimilarity", tag = "d")+
+  #stat_poly_eq(data = dplyr::filter(data5, position == 'L'),
+  #            mapping = aes(Chl,distance,group = factor(position,levels = c("L",'R')),
+  #                         color = factor(position,levels = c("L",'R')),
+  #                        label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #         formula = y ~ x, parse = TRUE)+
+  #stat_poly_eq(data = dplyr::filter(data5, position == 'R'),
+  #            mapping = aes(Chl,distance,group = factor(position,levels = c("L",'R')),
+  #                         color = factor(position,levels = c("L",'R')),
+  #                        label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #         formula = y ~ x, parse = TRUE)+
+  theme_bw()+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01)) +
+  theme(panel.grid.major=element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(size=10, color="black"),
+        axis.text.y = element_text(color = "black",size = 10),
+        panel.grid.minor=element_blank(),
+        axis.title.y=element_text(color = "black",size = 12),
+        axis.title.x=element_text(color = "black",size = 12)) -> p2d; p2d
+
+###p2e
+group1 <- group[,c(2,3,5,6,7)]
+group1$group <- rownames(group)
+data_3col=dist.3col(data)
+colnames(data_3col) <- c("group", "group2", "distance")
+data1 <- dplyr::left_join(data_3col,group1, by = "group")
+group2 <- group[,c(2,3,5,6,7)]
+group2$group2 <- rownames(group)
+data2 <- dplyr::left_join(data1, group2, by = "group2")
+data2$species <- ifelse(data2$species.x == data2$species.y, data2$species.x, 0)
+data3 <- subset(data2, species != 0)
+
+data3$elevation <- ifelse(data3$elevation.x == data3$elevation.y, data3$elevation.x, 0)
+data4 <- subset(data3, elevation != 0)
+
+data4$compartment <- ifelse(data4$compartment.x == data4$compartment.y, data4$compartment.x, 0)
+data5 <- subset(data4, compartment != 0)
+data5$time <- abs(data5$time.x - data5$time.y)
+
+leaf <- subset(data5, compartment == "L")
+root <- subset(data5, compartment == "R")
+ggplot()+
+  geom_jitter(data = dplyr::filter(data5, compartment == 'R'), 
+              aes(x = time+0.2, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3, color = "#7A8234", alpha = 0.4,
+              show.legend = FALSE)+
+  geom_jitter(data = dplyr::filter(data5, compartment == 'L'), 
+              aes(x = time-0.2, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3, color = "#108b96", alpha = 0.4,
+              show.legend = FALSE)+
+  stat_smooth(data = dplyr::filter(data5, compartment == 'L'),
+              mapping = aes(time,distance),
+              method = "lm",
+              formula = y ~ x,
+              se = T,
+              linewidth = 0.5,
+              color = c("#108b96"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  stat_smooth(data = dplyr::filter(data5, compartment == 'R'),
+              mapping = aes(time,distance),
+              method = "lm",
+              formula = y ~ x+I(x^2),
+              se = T,
+              linewidth = 0.5,
+              color = c("#7A8234"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  labs(x = "Time interval (month) \n", y = "Compositional dissimilarity")+
+  #stat_poly_eq(data = dplyr::filter(data5, compartment == 'L'),
+  #            mapping = aes(time,distance,group = factor(compartment,levels = c("L",'S')),
+  #                        color = factor(compartment,levels = c("L",'S')),
+  #                       label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #        formula = y ~ x, parse = TRUE)+
+  stat_poly_eq(data = dplyr::filter(data5, compartment == 'R'),
+               mapping = aes(time,distance,group = factor(compartment,levels = c("L",'R')),
+                             color = factor(compartment,levels = c("L",'R')),
+                             label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+               formula = y ~ x+I(x^2), parse = TRUE)+
+  theme_bw()+
+  theme(panel.grid.major=element_blank(),
+        legend.position = "bottom",
+        axis.text.x = element_text(size=10, color="black"),
+        axis.text.y = element_text(color = "black",size = 10),
+        panel.grid.minor=element_blank(),
+        axis.title.y=element_text(color = "black",size = 12),
+        axis.title.x=element_text(color = "black",size = 12))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank()) -> p1e;p1e
+
+ggplot()+
+  geom_jitter(data = dplyr::filter(data5, compartment == 'R'), 
+              aes(x = time+0.2, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3, color = "#7A8234", alpha = 0.4,
+              show.legend = FALSE)+
+  geom_jitter(data = dplyr::filter(data5, compartment == 'L'), 
+              aes(x = time-0.2, y = distance), width = 0.2,
+              height =0, size = 0.8, shape = 21, 
+              stroke = 0.3, color = "#108b96", alpha = 0.4,
+              show.legend = FALSE)+
+  stat_smooth(data = dplyr::filter(data5, compartment == 'L'),
+              mapping = aes(time,distance),
+              method = "lm",
+              formula = y ~ x,
+              se = T,
+              linewidth = 0.5,
+              color = c("#108b96"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  stat_smooth(data = dplyr::filter(data5, compartment == 'R'),
+              mapping = aes(time,distance),
+              method = "lm",
+              formula = y ~ x+I(x^2),
+              se = T,
+              linewidth = 0.5,
+              color = c("#7A8234"),
+              fill = c("grey70")
+              #fill = c("#F6AB8A","#EDB11A","#87CEEB"),
+              #color = "#D5605C"
+  )+
+  labs(x = "Time interval (month) \n", y = "Compositional dissimilarity")+
+  #stat_poly_eq(data = dplyr::filter(data5, compartment == 'L'),
+  #            mapping = aes(time,distance,group = factor(compartment,levels = c("L",'S')),
+  #                         color = factor(compartment,levels = c("L",'S')),
+  #                        label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #         formula = y ~ x, parse = TRUE)+
+  #stat_poly_eq(data = dplyr::filter(data5, compartment == 'S'),
+  #            mapping = aes(time,distance,group = factor(compartment,levels = c("L",'S')),
+  #                         color = factor(compartment,levels = c("L",'S')),
+  #                        label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+  #         formula = y ~ x+I(x^2), parse = TRUE)+
+  theme_bw()+
+  theme(panel.grid.major=element_blank(),
+        legend.position = "bottom",
+        axis.text.x = element_text(size=10, color="black"),
+        axis.text.y = element_text(color = "black",size = 10),
+        panel.grid.minor=element_blank(),
+        axis.title.y=element_text(color = "black",size = 12),
+        axis.title.x=element_text(color = "black",size = 12))+
+  facet_grid(species~.)+
+  theme(strip.text = element_blank()) -> p1f;p1f
+library(patchwork)
+layout <- "
+AACCFF
+BBDDFF
+EEEEFF
+"
+p1a + p1b + p1c + p1d + p1e + p1f +
+  plot_layout(design = layout)+
+  plot_annotation(
+    tag_levels = 'a', 
+    tag_prefix = '', 
+    tag_suffix = ''
+  )
+
+
+#########Fig 3##########
+diversity <- read.xlsx("trans_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+diversity$logOTUs.of.total <- log(diversity$OTUs.of.total)
+df2 <- data_summary(diversity, varname = "logOTUs.of.total",groupnames = c("compartment","site","species"))
+df2$site <- factor(df2$site,levels = c("L","M","H"))
+diversity$site <- factor(diversity$site,levels = c("L","M","H"))
+ggplot()+
+  geom_line(data = df2,mapping = aes(x=site,y=logOTUs.of.total,group= compartment),color="black",
+            show.legend = FALSE,size = 0.5)+
+  geom_errorbar(data = df2,mapping = aes(x=site,y=logOTUs.of.total,ymin=logOTUs.of.total-se,
+                                         ymax=logOTUs.of.total+se,color=compartment),
+                width=0,size = 0.5)+
+  geom_jitter(data = diversity,mapping = aes(x=site,y=logOTUs.of.total,shape=compartment,color = compartment),
+              size=1,width =0.03,alpha = 0.2)+
+  geom_point(data = df2,mapping = aes(x=site,y=logOTUs.of.total,color=compartment,shape = compartment),size=2,width =0.3)+
+  scale_shape_manual(values = c("L"=16,
+                                "R"=16))+
+  scale_color_manual(values = c("L"="#108b96" ,
+                                "R"="#7A8234"))+
+  labs(y="No. of total OTUs (log)")+
+  theme_classic()+
+  theme(axis.title = element_text(color='black',size=12),
+        axis.title.x=element_text(colour='black', size=12,vjust = 0),
+        axis.title.y=element_text(colour='black', size=12,vjust = 0),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.key=element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(colour = "black"))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank())-> p1a;p1a
+
+df2 <- data_summary(diversity, varname = "OTUs",groupnames = c("compartment","site","species"))
+ggplot()+
+  geom_line(data = df2,mapping = aes(x=site,y=OTUs,group= compartment),color="black",
+            show.legend = FALSE,size = 0.5)+
+  geom_errorbar(data = df2,mapping = aes(x=site,y=OTUs,ymin=OTUs-se,
+                                         ymax=OTUs+se,color=compartment),
+                width=0,size = 0.5)+
+  geom_jitter(data = diversity,mapping = aes(x=site,y=OTUs,shape=compartment,color = compartment),
+              size=1,width =0.03,alpha = 0.2)+
+  geom_point(data = df2,mapping = aes(x=site,y=OTUs,color=compartment,shape = compartment),size=2,width =0.3)+
+  scale_shape_manual(values = c("L"=16,
+                                "R"=16))+
+  scale_color_manual(values = c("L"="#108b96" ,
+                                "R"="#7A8234"))+
+  labs(y="% OTUs shared")+
+  theme_classic()+
+  theme(axis.title = element_text(color='black',size=12),
+        axis.title.x=element_text(colour='black', size=12,vjust = 0),
+        axis.title.y=element_text(colour='black', size=12,vjust = 0),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 10,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.key=element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(colour = "black"))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank())-> p1b;p1b
+
+df2 <- data_summary(diversity, varname = "reads",groupnames = c("compartment","site","species"))
+ggplot()+
+  geom_line(data = df2,mapping = aes(x=site,y=reads,group= compartment),color="black",
+            show.legend = FALSE,size = 0.5)+
+  geom_errorbar(data = df2,mapping = aes(x=site,y=reads,ymin=reads-se,
+                                         ymax=reads+se,color=compartment),
+                width=0,size = 0.5)+
+  geom_jitter(data = diversity,mapping = aes(x=site,y=reads,shape=compartment,color = compartment),
+              size=1,width =0.03,alpha = 0.2)+
+  geom_point(data = df2,mapping = aes(x=site,y=reads,color=compartment,shape = compartment),size=2,width =0.3)+
+  scale_shape_manual(values = c("L"=16,
+                                "R"=16))+
+  scale_color_manual(values = c("L"="#108b96" ,
+                                "R"="#7A8234"))+
+  labs(y="RA of shared OTUs (%)")+
+  theme_classic()+
+  theme(axis.title = element_text(color='black',size=12),
+        axis.title.x=element_text(colour='black', size=12,vjust = 0),
+        axis.title.y=element_text(colour='black', size=12,vjust = 0),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 10,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.key=element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(colour = "black"))+
+  facet_wrap(~species)+
+  theme(strip.text = element_blank())-> p1c;p1c
+
+library(patchwork)
+layout <- "
+AAAAAA
+BBBBBB
+CCCCCC
+"
+p1a + p1b + p1c + 
+  plot_layout(design = layout)
+##################Fig 4##############
+###Fig 4a-f
+tran <- read.xlsx("trans_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("trans_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+Fnil <- subset(group,species == "F")
+data <- tran[rownames(tran) %in% rownames(Fnil),]
+Fnil1 <- data[,colnames(data) %in% rownames(Fnil)]
+pcoa <- cmdscale(Fnil1, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+Fnil$SampleID <- rownames(Fnil)
+sample_site <- merge(pcoa,Fnil)
+sample_site$site <- factor(sample_site$site, levels = c("L","M","H"))
+sample_site$popu <- factor(sample_site$popu, levels = c("L","M","H"))
+sample_site$soil <- factor(sample_site$popu, levels = c("Home","Away"))
+sample_site$compartment <- factor(sample_site$compartment, levels = c("L","R"))
+#sample_site$population <- as.factor(sample_site$population)
+#sample_Jun <- sample_site[c(185:193),]
+#sample_Aug <- sample_site[c(1:184),]
+#df <- aggregate(cbind(PCoA1, PCoA2) ~ site + species + soil, sample_Aug, mean)
+#colnames(df)[c(4,5)] = c("PCoA1_mean","PCoA2_mean")
+#sample_Aug$type = paste0(sample_Aug$site,"_",sample_Aug$species,"_",sample_Aug$soil)
+#df$type = paste0(df$site,"_",df$species,"_",df$soil)
+#sample_site2 = sample_Aug %>% left_join(df[,c(4:6)], by = "type")
+p1 <- ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(sample_site,mapping = aes(PCoA1, PCoA2,shape = compartment,color = popu), size = 2)+
+  scale_color_manual(values = c("#974FA3","#4CAB3B","#3C72AF")) +
+  scale_shape_manual(values = c(16,21)) +
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.5)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.5)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01))
+p1
+
+Pasi <- subset(group,species == "P")
+data <- tran[rownames(tran) %in% rownames(Pasi),]
+Pasi1 <- data[,colnames(data) %in% rownames(Pasi)]
+pcoa <- cmdscale(Pasi1, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+Pasi$SampleID <- rownames(Pasi)
+sample_site <- merge(pcoa,Pasi)
+sample_site$site <- factor(sample_site$site, levels = c("L","M","H"))
+sample_site$popu <- factor(sample_site$popu, levels = c("L","M","H"))
+sample_site$soil <- factor(sample_site$popu, levels = c("Home","Away"))
+sample_site$compartment <- factor(sample_site$compartment, levels = c("L","R"))
+p2 <- ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(sample_site,mapping = aes(PCoA1, PCoA2,shape = compartment,color = factor(popu)), size = 2)+
+  scale_color_manual(values = c("#974FA3","#4CAB3B","#3C72AF")) +
+  scale_shape_manual(values = c(16,21)) +
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.5)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.5)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01))
+p2
+
+Trep <- subset(group,species == "T")
+data <- tran[rownames(tran) %in% rownames(Trep),]
+Trep1 <- data[,colnames(data) %in% rownames(Trep)]
+pcoa <- cmdscale(Trep1, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+Trep$SampleID <- rownames(Trep)
+sample_site <- merge(pcoa,Trep)
+sample_site$site <- factor(sample_site$site, levels = c("L","M","H"))
+sample_site$popu <- factor(sample_site$popu, levels = c("L","M","H"))
+sample_site$soil <- factor(sample_site$popu, levels = c("Home","Away"))
+sample_site$compartment <- factor(sample_site$compartment, levels = c("L","R"))
+p3 <- ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(sample_site,mapping = aes(PCoA1, PCoA2,shape = compartment,color = factor(popu)), size = 2)+
+  scale_color_manual(values = c("#974FA3","#4CAB3B","#3C72AF")) +
+  scale_shape_manual(values = c(16,21)) +
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.5)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.5)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01))
+p3
+
+Fnil <- subset(group,species == "F")
+data <- tran[rownames(tran) %in% rownames(Fnil),]
+Fnil1 <- data[,colnames(data) %in% rownames(Fnil)]
+pcoa <- cmdscale(Fnil1, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+Fnil$SampleID <- rownames(Fnil)
+sample_site <- merge(pcoa,Fnil)
+sample_site$site <- factor(sample_site$site, levels = c("L","M","H"))
+sample_site$popu <- factor(sample_site$popu, levels = c("L","M","H"))
+sample_site$soil <- factor(sample_site$popu, levels = c("Home","Away"))
+sample_site$compartment <- factor(sample_site$compartment, levels = c("L","R"))
+p4 <- ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(subset(sample_site,soilsource == "Home"),mapping = aes(PCoA1, PCoA2,shape = factor(site)), size = 2,color = "#6D6D67")+
+  geom_point(subset(sample_site,soilsource == "Away"),mapping = aes(PCoA1, PCoA2,shape = factor(site)), size = 2,fill = "#6D6D67")+
+  scale_shape_manual(values = c(21,24,22)) +
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.5)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.5)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01))
+p4
+
+Pasi <- subset(group,species == "P")
+data <- tran[rownames(tran) %in% rownames(Pasi),]
+Pasi1 <- data[,colnames(data) %in% rownames(Pasi)]
+pcoa <- cmdscale(Pasi1, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+Pasi$SampleID <- rownames(Pasi1)
+sample_site <- merge(pcoa,Pasi)
+sample_site$site <- factor(sample_site$site, levels = c("L","M","H"))
+sample_site$popu <- factor(sample_site$popu, levels = c("L","M","H"))
+sample_site$soil <- factor(sample_site$popu, levels = c("Home","Away"))
+sample_site$compartment <- factor(sample_site$compartment, levels = c("L","R"))
+p5 <- ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(subset(sample_site,soilsource == "Home"),mapping = aes(PCoA1, PCoA2,shape = factor(site)), size = 2,color = "#6D6D67")+
+  geom_point(subset(sample_site,soilsource == "Away"),mapping = aes(PCoA1, PCoA2,shape = factor(site)), size = 2,fill = "#6D6D67")+
+  scale_shape_manual(values = c(21,24,22)) +
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.5)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.5)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01))
+p5
+
+Trep <- subset(group,species == "T")
+data <- tran[rownames(tran) %in% rownames(Trep),]
+Trep1 <- data[,colnames(data) %in% rownames(Trep)]
+pcoa <- cmdscale(Trep1, k = 2, eig = TRUE)
+poi <- pcoa$points
+eigval <- pcoa$eig
+pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+pcoa_eig <- round(pcoa_eig, 3)
+pcoa <- as.data.frame(poi)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+pcoa$SampleID <- rownames(pcoa)
+Trep$SampleID <- rownames(Trep)
+sample_site <- merge(pcoa,Trep)
+sample_site$site <- factor(sample_site$site, levels = c("L","M","H"))
+sample_site$popu <- factor(sample_site$popu, levels = c("L","M","H"))
+sample_site$soil <- factor(sample_site$popu, levels = c("Home","Away"))
+sample_site$compartment <- factor(sample_site$compartment, levels = c("L","R"))
+p6 <- ggplot()+
+  #stat_ellipse(plot_data2, mapping = aes(PCoA1, PCoA2, color = Family),geom="polygon",level = 0.95, fill=NA, size=1, show.legend = FALSE) +
+  geom_point(subset(sample_site,soilsource == "Home"),mapping = aes(PCoA1, PCoA2,shape = factor(site)), size = 2,color = "#6D6D67")+
+  geom_point(subset(sample_site,soilsource == "Away"),mapping = aes(PCoA1, PCoA2,shape = factor(site)), size = 2,fill = "#6D6D67")+
+  scale_shape_manual(values = c(21,24,22)) +
+  labs(x=paste("PCoA1 (", format(100 * pcoa_eig[1], digits=3), "%)", sep=""),
+       y=paste("PCoA2 (", format(100 * pcoa_eig[2], digits=3), "%)", sep=""))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(text=element_text(size=12))+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        legend.position = "none",
+        legend.title=element_text(size = 12,face = "bold"),
+        legend.text=element_text(size= 10))+
+  geom_vline(aes(xintercept = 0),linetype="dashed",size = 0.5)+
+  geom_hline(aes(yintercept = 0),linetype="dashed",size = 0.5)+
+  scale_x_continuous(labels = scales::label_comma(accuracy =0.01))+
+  scale_y_continuous(labels = scales::label_comma(accuracy =0.01))
+p6
+(p1 | p2 | p3) / (p4 | p5 | p6)
+
+total <- read.xlsx("trans_field.xlsx", sheet = "fit_home",colNames = T, rowNames = T)
+p1 <- ggplot()+
+  #geom_point(total,mapping = aes(x=distance,y=proportion*100,color = "white"),
+  #          size=4,shape = 20)+
+  labs(x = "Elevational difference (m)", y = "Proportion (%)")+
+  stat_smooth (subset(total,Species == "F. nilgerrensis"), mapping = aes(Distance, proportion*100),
+               method = "lm",
+               formula = y ~ x,
+               se = T,color = "#6D6D67",
+               alpha = 0.2,size = 1)+
+  stat_smooth (subset(total,Species == "P. asiatica"), mapping = aes(Distance, proportion*100),
+               method = "lm",
+               formula = y ~ I(x^2),
+               se = T,color = "#F6B36F",
+               alpha = 0.2,size = 1)+
+  stat_smooth (subset(total,Species == "T. repens"), mapping = aes(Distance, proportion*100),
+               method = "lm",
+               formula = y ~ I(x^2),
+               se = T,color = "#B84B24",
+               alpha = 0.2,size = 1)+
+  stat_poly_eq(subset(total,Species == "F. nilgerrensis"), mapping = aes(Distance, proportion*100,color = "#6D6D67",
+                                                                         label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+               formula = y ~ x, parse = TRUE)+
+  stat_poly_eq(subset(total,Species == "P. asiatica"), mapping = aes(Distance, proportion*100,color = "#F6B36F",
+                                                                     label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+               formula = y ~ I(x^2), parse = TRUE)+
+  stat_poly_eq(subset(total,Species == "T. repens"), mapping = aes(Distance, proportion*100,color = "#B84B24",
+                                                                   label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+               formula = y ~ I(x^2), parse = TRUE)+
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        axis.title.x=element_text(colour='black', size=12),
+        axis.title.y=element_text(colour='black', size=12),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 10,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.position = "right")+
+  theme(strip.background.x = element_rect(color=NA, fill="gray80"),
+        strip.background.y = element_rect(color=NA, fill="gray80"),
+        strip.placement = "outside")+
+  theme(strip.text.x = element_text(size = 12, color = "black"), 
+        strip.text.y = element_text(size = 12, color = "black"))+
+  theme(panel.spacing = unit(1, "lines")) -> p4c;p4c
+
+###Fig 4d
+paired <- read.xlsx("trans_field.xlsx", sheet = "paired",colNames = T, rowNames = T)
+p2 <- ggplot()+
+  geom_point(paired,mapping = aes(x=direction,y=wunifrac,color = species.y),
+             size=3,shape = 20)+
+  labs(x = "Elevation difference (m)", y = "Composition dissimilarity")+
+  stat_smooth (paired, mapping = aes(direction, wunifrac,color = species.y),
+               method = "lm",
+               formula = y ~ x,
+               se = T,
+               fill = "grey90",
+               alpha = 0.5,size = 1)+
+  stat_poly_eq(paired, mapping = aes(direction,wunifrac ,color = species.y, label =  paste(..rr.label..,..p.value.label..,  sep = "~~~~")),
+               formula = y~x, parse = TRUE)+
+  scale_color_manual(values = c("#6D6D67","#F6B36F","#B84B24")) +
+  theme(panel.background = element_rect(fill='white', colour='black'),
+        panel.grid=element_blank(), 
+        axis.title.x=element_text(colour='black', size=12),
+        axis.title.y=element_text(colour='black', size=12),
+        axis.text=element_text(colour='black',size=10),
+        legend.title=element_text(size = 10,face = "bold"),
+        legend.text=element_text(size= 10),
+        legend.position = "top")+
+  theme(strip.background.x = element_rect(color=NA, fill="gray80"),
+        strip.background.y = element_rect(color=NA, fill="gray80"),
+        strip.placement = "outside")+
+  theme(strip.text.x = element_text(size = 12, color = "black"), 
+        strip.text.y = element_text(size = 12, color = "black"))+
+  theme(panel.spacing = unit(1, "lines")) -> p4d;p4d
+
+###Fig 4b-原始地植物种在不同土壤
+feast <- read.xlsx("trans_field.xlsx", sheet = "feast_yuanshi",colNames = T, rowNames = T)
+gathered <- feast %>% 
+  pivot_longer(c(Local.conspecific.rhizo.soils, Local.conspecific.phyllo.soils, Initial.away.soils, Unknown),
+               names_to = "Source",
+               values_to="proportion")
+head(gathered,6)
+gathered1 <- aggregate(proportion ~ Direction + Species + Compartment + Source, data = gathered, FUN = mean) 
+gathered1$Direction <- factor(gathered1$Direction,levels = c("HL","HM","ML","LM","MH","LH"))
+gathered$Direction <- as.factor(gathered$Direction)
+ggplot(gathered1, aes(Direction, y = proportion*100,
+                      fill = Source,
+                      stratum = Source, alluvium = Source))+
+  geom_col() +
+  scale_y_continuous(expand = c(0,0))+
+  labs(y="Proportion(%)")+
+  theme_bw()+
+  facet_nested(~Compartment + Species,scales = "free",space = "free")+
+  theme(panel.grid = element_blank(),
+        axis.text.y = element_text(size=10),
+        axis.text.x = element_text(size=10, angle = 45, vjust = 1, hjust = 1),
+        axis.title = element_text(size=12))+
+  guides(fill=guide_legend(keywidth = 1.2, keyheight = 1.2)) +
+  scale_fill_manual(values = c("#73A047","#3596A3",
+                               "#5E458F","#666666","#1C6894"))
+
+####Fig S6-植物种移植到新的地方在不同土壤
+feast <- read.xlsx("trans_field.xlsx", sheet = "feast_new",colNames = T, rowNames = T)
+gathered <- feast %>% 
+  pivot_longer(c(Local.conspe.rhizos, Local.conspe.phyllo, Intial.home.soil, Unknown),
+               names_to = "Source",
+               values_to="Proportion")
+head(gathered,6)
+gathered1 <- aggregate(Proportion ~ Direction + Species + Compartment + Source, data = gathered, FUN = mean) 
+gathered1$Direction <- factor(gathered1$Direction,levels = c("HL","HM","ML","LM","MH","LH"))
+gathered$Direction <- as.factor(gathered$Direction)
+ggplot(gathered1, aes(Direction, y = Proportion*100,
+                      fill = Source,
+                      stratum = Source, alluvium = Source))+
+  geom_col() +
+  scale_y_continuous(expand = c(0,0))+
+  labs(y="Proportion(%)")+
+  theme_bw()+
+  facet_nested(~Compartment + Species,scales = "free",space = "free")+
+  theme(panel.grid = element_blank(),
+        axis.text.y = element_text(size=10),
+        axis.text.x = element_text(size=10, angle = 45, vjust = 1, hjust = 1),
+        axis.title = element_text(size=12))+
+  guides(fill=guide_legend(keywidth = 1.2, keyheight = 1.2)) +
+  scale_fill_manual(values = c("#73A047","#3596A3",
+                               "#5E458F","#666666","#1C6894"))
+
+######Fig 5a#####
+group <- read.xlsx("trans_field.xlsx", sheet = "mean_RGR",colNames = T, rowNames = T)
+group$type = paste0(group$site,"_",group$popu,"_",group$soil)
+group$type1 = paste0(group$popu,"_",group$soil)
+popu_low <- subset(group, type %in% c("L_M_L", "L_M_M", "L_L_M", "L_L_L", "M_M_L", "M_M_M", "M_L_M", "M_L_L") & species == "F. nilgerrensis")
+popu_low$group <- c("1")
+popu_mid <- subset(group, type %in% c("M_H_H", "M_M_M", "M_H_M", "M_M_H", "H_H_H", "H_M_M", "H_H_M", "H_M_H") & species == "F. nilgerrensis")
+popu_mid$group <- c("2")
+popu_high <- subset(group, type %in% c("L_L_L", "L_H_H", "L_L_H", "L_H_L", "H_L_L", "H_H_H", "H_L_H", "H_H_L") & species == "F. nilgerrensis")
+popu_high$group <- c("3")
+unique(popu_low)
+data <- rbind(popu_low,popu_mid,popu_high)
+data$soil <- factor(data$soil, levels = c("L","M","H"))
+data$site <- factor(data$site, levels = c("L","M","H"))
+data$popu <- factor(data$popu, levels = c("L","M","H"))
+unique(data$type1)
+ggplot(data, aes(x= site, y = RGR))+
+  geom_point(aes(shape = soil,color = popu),size = 2,alpha = 0.9)+
+  geom_line(aes(group = type1,color = popu),size = 0.4,alpha = 0.9)+
+  geom_errorbar(aes(ymin = RGR - se, ymax = RGR + se,color = popu), width = 0,size = 0.5,alpha = 0.9) +
+  scale_color_manual(values = c("#974EA3","#4BAB3A","#3C72AF"))+
+  #scale_fill_manual(values = c("#974EA3","#4BAB3A","#3C72AF"))+
+  scale_shape_manual(values=c(16,17,15))+
+  theme_bw()+
+  facet_wrap(.~group, scales = "free_x")+
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p1;p1
+
+popu_low <- subset(group, type %in% c("L_M_L", "L_M_M", "L_L_M", "L_L_L", "M_M_L", "M_M_M", "M_L_M", "M_L_L") & species == "P. asiatica")
+popu_low$group <- c("1")
+popu_mid <- subset(group, type %in% c("M_H_H", "M_M_M", "M_H_M", "M_M_H", "H_H_H", "H_M_M", "H_H_M", "H_M_H") & species == "P. asiatica")
+popu_mid$group <- c("2")
+popu_high <- subset(group, type %in% c("L_L_L", "L_H_H", "L_L_H", "L_H_L", "H_L_L", "H_H_H", "H_L_H", "H_H_L") & species == "P. asiatica")
+popu_high$group <- c("3")
+unique(popu_low)
+data <- rbind(popu_low,popu_mid,popu_high)
+data$soil <- factor(data$soil, levels = c("L","M","H"))
+data$site <- factor(data$site, levels = c("L","M","H"))
+data$popu <- factor(data$popu, levels = c("L","M","H"))
+ggplot(data, aes(x= site, y = RGR))+
+  geom_point(aes(shape = soil,color = popu),size = 2,alpha = 0.9)+
+  geom_line(aes(group = type1,color = popu),size = 0.4,alpha = 0.9)+
+  geom_errorbar(aes(ymin = RGR - se, ymax = RGR + se,color = popu), width = 0,size = 0.5,alpha = 0.9) +
+  scale_color_manual(values = c("#974EA3","#4BAB3A","#3C72AF"))+
+  #scale_fill_manual(values = c("#974EA3","#4BAB3A","#3C72AF"))+
+  scale_shape_manual(values=c(16,17,15))+
+  theme_bw()+
+  facet_wrap(.~group, scales = "free_x")+
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p2;p2
+
+popu_low <- subset(group, type %in% c("L_M_L", "L_M_M", "L_L_M", "L_L_L", "M_M_L", "M_M_M", "M_L_M", "M_L_L") & species == "T. repens")
+popu_low$group <- c("1")
+popu_mid <- subset(group, type %in% c("M_H_H", "M_M_M", "M_H_M", "M_M_H", "H_H_H", "H_M_M", "H_H_M", "H_M_H") & species == "T. repens")
+popu_mid$group <- c("2")
+popu_high <- subset(group, type %in% c("L_L_L", "L_H_H", "L_L_H", "L_H_L", "H_L_L", "H_H_H", "H_L_H", "H_H_L") & species == "T. repens")
+popu_high$group <- c("3")
+unique(popu_low)
+data <- rbind(popu_low,popu_mid,popu_high)
+data$soil <- factor(data$soil, levels = c("L","M","H"))
+data$site <- factor(data$site, levels = c("L","M","H"))
+data$popu <- factor(data$popu, levels = c("L","M","H"))
+ggplot(data, aes(x= site, y = RGR))+
+  geom_point(aes(shape = soil,color = popu),size = 2,alpha = 0.9)+
+  geom_line(aes(group = type1,color = popu),size = 0.4,alpha = 0.9)+
+  geom_errorbar(aes(ymin = RGR - se, ymax = RGR + se,color = popu), width = 0,size = 0.5,alpha = 0.9) +
+  scale_color_manual(values = c("#974EA3","#4BAB3A","#3C72AF"))+
+  #scale_fill_manual(values = c("#974EA3","#4BAB3A","#3C72AF"))+
+  scale_shape_manual(values=c(16,17,15))+
+  theme_bw()+
+  facet_wrap(.~group, scales = "free_x")+
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p3;p3
+(p1+p4) / (p2+p5) / (p3+p6)
+
+#######################shared_filter################
+###Using field survey data as an example
+library(openxlsx)
+field_otu <- read.csv("field_otu.csv", row.names = 1)
+
+#field_otu[field_otu > 0] = 1
+
+field_otu1=t(field_otu)
+head(field_otu1[1:4,1:4])
+field_group <- read.xlsx("chen_newID.xlsx", sheet = "rowname",colNames = T, rowNames = T)
+head(field_group)
+
+total_Data<-merge(field_group, field_otu1, by = "row.names", all = T)
+
+rownames(total_Data) = total_Data$new_num
+total_Data[1:6,1:6]
+
+origin <- as.character(substr(rownames(field_otu1), 1,1))
+chen_raw <- data.frame(origin,field_otu1)
+head(chen_raw[1:4,1:4])
+raw_leaf = t(subset(total_Data, Origin == "L")[,-c(1:3)])
+raw_soil = t(subset(total_Data, Origin == "S")[,-c(1:3)])
+head(raw_leaf[1:6,1:6])
+head(raw_soil[1:6,1:6])
+name1 = combn(colnames(raw_leaf),1)
+name2 = combn(colnames(raw_soil),1)
+raw_leaf1 = raw_leaf
+raw_soil2 = raw_soil
+
+for (i in 1:244) {
+  k = i
+  raw_leaf1[raw_leaf1 > 0] = 1
+  leaf_OTU1 = as.data.frame(raw_leaf1[,name1[,i]])
+  leaf_OTU11 <- cbind(rownames(raw_leaf), data.frame(leaf_OTU1, row.names=NULL))
+  colnames(leaf_OTU11)[1:2] <- c('OTU', 'abundance')
+  
+  Leaf_OTU_filter <- leaf_OTU11[which(rowSums(leaf_OTU11==0)==0),]
+  ####
+  raw_soil2[raw_soil2 > 0] = 1
+  soil_OTU2 = as.data.frame(raw_soil2[,name2[,i]])
+  soil_OTU22 <- cbind(rownames(raw_soil), data.frame(soil_OTU2, row.names=NULL))
+  colnames(soil_OTU22)[1:2] <- c('OTU', 'abundance')
+  
+  Soil_OTU_filter <- soil_OTU22[which(rowSums(soil_OTU22==0)==0),]
+  
+  
+  result=dplyr::intersect(Leaf_OTU_filter,Soil_OTU_filter)
+  Common_OTU=(result[,1])
+  pair_target = paste(name1[,i],name2[,i],sep= "_")
+  Common_OTU_num = sum(result$abundance)
+ 
+  OTU_intersect_name <- intersect(Leaf_OTU_filter$OTU, Soil_OTU_filter$OTU)
+  Leaf_intersect_OUT_abun <- raw_leaf[OTU_intersect_name, i]
+  Leaf_intersect_OUT_abun=as.data.frame(Leaf_intersect_OUT_abun)
+  soil_intersect_OUT_abun <- raw_soil[OTU_intersect_name, i]
+  soil_intersect_OUT_abun=as.data.frame(soil_intersect_OUT_abun) 
+  #identical(rownames(Leaf_intersect_OUT_abun), rownames(soil_intersect_OUT_abun))
+  
+  Final_result = cbind(pair_target,Common_OTU_num,Common_OTU,Leaf_intersect_OUT_abun,soil_intersect_OUT_abun)
+  assign(paste("Final_result", k, sep = ""), Final_result)
+}
+
+l <- data.frame()
+
+for(t in 1:244){
+  
+  df.d <- get(paste0("Final_result",t))
+  l <- rbind(l, df.d)
+}
+
+#write.table(l,"shared.txt",sep = "\t",row.names = F)
+#####################Paired distance gamm model#################
+field_dis <- read.xlsx("entire_field.xlsx", sheet = "wunifrac",colNames = T, rowNames = T)
+group <- read.xlsx("entire_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1 <- group[,c(3,5,6,7)]
+group1$group <- rownames(group)
+data_3col=dist.3col(field_dis)
+colnames(data_3col) <- c("group", "group2", "distance")
+data1 <- dplyr::left_join(data_3col,group1, by = "group")
+group2 <- group[,c(3,5,6,7)]
+group2$group2 <- rownames(group)
+data2 <- dplyr::left_join(data1, group2, by = "group2")
+data2$combi <- ifelse(data2$species.x == data2$species.y, data2$species.x, 0)
+data3 <- subset(data2, combi != 0)
+
+data3$time <- ifelse(data3$time.x == data3$time.y, data3$time.x, 0)
+data4 <- subset(data3, time != 0)
+
+data4$elevation <- ifelse(data4$elevation.x == data4$elevation.y, data4$elevation.x, 0)
+data5 <- subset(data4, elevation != 0)
+
+data5$type <- c("weighted Unifrac")
+wunifrac <- data5
+
+Fdata <- subset(wunifrac, species.y == "F") 
+fit<-gamm(formula(distance~s(time.x,bs='cr', k = 5)), 
+          random=list(elevation.x=~1),data=Fdata,
+          family=gaussian)
+
+draw(fit$gam)+theme_bw()
+summary(fit$gam)
+summary(fit$lme)
+pred<-predict.gam(fit$gam,type="terms",se.fit=TRUE)
+mfit <- pred$fit[,'s(time.x)']
+sfit <- pred$se.fit[,'s(time.x)']
+mfit<-mfit+mean(fit$gam$fitted.values)-mean(mfit)
+dat<-cbind(Fdata,mfit,sfit)
+rm(mfit,sfit)
+dat$y.low <- dat$mfit-1.96*dat$sfit
+dat$y.upp <- dat$mfit+1.96*dat$sfit
+dat <- arrange(dat,time.x)
+#ggplot()+geom_line(data=dat,aes(x=time.x,y=mfit),
+ #                  lwd=1)+
+  #geom_ribbon(data=dat,aes(ymin=y.low, ymax=y.upp,
+   #                        x=time.x),alpha = 0.2)
+
+Pdata <- subset(wunifrac, species.y == "P") 
+fit<-gamm(formula(distance~s(time.x,bs='cr', k = 5)), 
+          random=list(elevation.x=~1),data=Pdata,
+          family=gaussian)
+draw(fit$gam)+theme_bw()
+summary(fit$gam)
+summary(fit$lme)
+pred<-predict.gam(fit$gam,type="terms",se.fit=TRUE)
+mfit <- pred$fit[,'s(time.x)']
+sfit <- pred$se.fit[,'s(time.x)']
+mfit<-mfit+mean(fit$gam$fitted.values)-mean(mfit)
+dat<-cbind(Pdata,mfit,sfit)
+rm(mfit,sfit)
+dat$y.low <- dat$mfit-1.96*dat$sfit
+dat$y.upp <- dat$mfit+1.96*dat$sfit
+dat <- arrange(dat,time.x) 
+col<- c("#FF5151",'#FF44FF')
+co<-c(9,20,-1,1)
+
+plot(mfit~time.x,ylim=c(co[3],co[4]),xlim=c(co[1],co[2]),col=col[1],type="l", lty=1, lwd=2, ylab="", xlab="")
+par(new=TRUE)
+plot(y.low~time.x,ylim=c(co[3],co[4]),xlim=c(co[1],co[2]),col=col[2], type="l", lty=3, lwd=1.5, ylab="", xlab="")
+par(new=TRUE); 
+plot(y.upp~time.x,ylim=c(co[3],co[4]),xlim=c(co[1],co[2]),col=col[2], type="l", lty=3, lwd=1.5, ylab='Infec_Disease', xlab='Year')
+
+
+Tdata <- subset(wunifrac,species.y == "T") 
+fit<-gamm(formula(distance~s(time.x,bs='cr', k = 5)), 
+          random=list(elevation.x=~1),data=Tdata,
+          family=gaussian)
+draw(fit$gam)+theme_bw()
+summary(fit$gam)
+summary(fit$lme)
+pred<-predict.gam(fit$gam,type="terms",se.fit=TRUE)
+mfit <- pred$fit[,'s(time.x)']
+sfit <- pred$se.fit[,'s(time.x)']
+mfit<-mfit+mean(fit$gam$fitted.values)-mean(mfit)
+dat<-cbind(Tdata,mfit,sfit)
+rm(mfit,sfit)
+dat$y.low <- dat$mfit-1.96*dat$sfit
+dat$y.upp <- dat$mfit+1.96*dat$sfit
+dat <- arrange(dat,time.x) 
+col<- c("#FF5151",'#FF44FF')
+co<-c(9,20,-1,1) 
+
+plot(mfit~time.x,ylim=c(co[3],co[4]),xlim=c(co[1],co[2]),col=col[1],type="l", lty=1, lwd=2, ylab="", xlab="")
+par(new=TRUE)
+plot(y.low~time.x,ylim=c(co[3],co[4]),xlim=c(co[1],co[2]),col=col[2], type="l", lty=3, lwd=1.5, ylab="", xlab="")
+par(new=TRUE); 
+plot(y.upp~time.x,ylim=c(co[3],co[4]),xlim=c(co[1],co[2]),col=col[2], type="l", lty=3, lwd=1.5, ylab='Infec_Disease', xlab='Year')
+
+###############Persistent microbial analysis#########
+#####pcoa
+set.seed(1234)
+#### 
+OTU_group = read.xlsx("trans_field.xlsx", sheet = "root_group", rowNames = T, colNames = T)
+OTU_group$Sample_ID = rownames(OTU_group)
+head(OTU_group)
+#### 
+OTU_group$Site_code = ifelse(OTU_group$Site == "2641", "H", ifelse(OTU_group$Site == "1946", "M", "L"))
+OTU_group$Popu_code = ifelse(OTU_group$Popu == "2641", "H", ifelse(OTU_group$Popu == "1946", "M", "L"))
+OTU_group$Soil_code = ifelse(OTU_group$Soil == "2641", "H", ifelse(OTU_group$Soil == "1946", "M", "L"))
+#### type code
+#OTU_group$type = paste(OTU_group$Soil_code, OTU_group$Site_code, OTU_group$Popu_code, sep = "_")
+OTU_group$type = paste(OTU_group$Soil_code, OTU_group$Site_code, sep = "_")
+#### rhizosphere
+bacteria_OTU_abun = read.xlsx("translocation.xlsx", sheet = "rhizosphere", rowNames = T, colNames = T)
+#bacteria_OTU_abun = read.xlsx("translocation.xlsx", sheet = "phyllosphere", rowNames = T, colNames = T)
+bacteria_OTU_abun[1:6,1:6]
+
+#### Obtain persistent and non-persistent OTU tables: OTU classes present in all samples before and after transplantation (August sample as baseline)
+Species = unique(OTU_group$Species); Species
+Scenario = unique(subset(OTU_group, Soilsource == "Away" & Time == "Aug")$type); Scenario
+#i = "P. asiatica"
+
+#### leaf_OTU_abun / bacteria_OTU_abun
+group_otu_abun = bacteria_OTU_abun
+
+###
+final_results_list = list()
+
+for (i in Species) {
+  select_data = subset(OTU_group, Species == i & Time == "Aug")
+  #### L_L_L(home)
+  L_L_L_home = select_data[select_data$type %in% "L_L", ]$Sample_ID
+  sample_low_OTU = group_otu_abun[, L_L_L_home]
+  sample_low_OTU <- sample_low_OTU[rowSums(sample_low_OTU)>0,]
+  #### M_M_M(home)
+  M_M_M_home = select_data[select_data$type %in% "M_M", ]$Sample_ID
+  sample_mid_OTU = group_otu_abun[, M_M_M_home]
+  sample_mid_OTU <- sample_mid_OTU[rowSums(sample_mid_OTU)>0,]
+  #### H_H_H(home)
+  H_H_H_home = select_data[select_data$type %in% "H_H", ]$Sample_ID
+  sample_high_OTU = group_otu_abun[, H_H_H_home]
+  sample_high_OTU <- sample_high_OTU[rowSums(sample_high_OTU)>0,]
+  ####
+  #### 
+  #### away sample( M -> H)
+  MtoH_away = c((subset(select_data, type == "M_H"))$Sample_ID)
+  MtoH_away_OTU = group_otu_abun[, MtoH_away]
+  MtoH_away_OTU <- MtoH_away_OTU[rowSums(MtoH_away_OTU)>0,]
+  #### away sample( L -> H)
+  LtoH_away = c((subset(select_data, type == "L_H"))$Sample_ID)
+  LtoH_away_OTU = group_otu_abun[, LtoH_away]
+  LtoH_away_OTU <- LtoH_away_OTU[rowSums(LtoH_away_OTU)>0,]
+  #### away sample( L -> M)
+  LtoM_away = c((subset(select_data, type == "L_M"))$Sample_ID)
+  LtoM_away_OTU = group_otu_abun[, LtoM_away]
+  LtoM_away_OTU <- LtoM_away_OTU[rowSums(LtoM_away_OTU)>0,]
+  #### 
+  #### away sample( H -> M)
+  HtoM_away = c((subset(select_data, type == "H_M"))$Sample_ID)
+  HtoM_away_OTU = group_otu_abun[, HtoM_away]
+  HtoM_away_OTU <- HtoM_away_OTU[rowSums(HtoM_away_OTU)>0,]
+  #### away sample( H -> L)
+  HtoL_away = c((subset(select_data, type == "H_L"))$Sample_ID)
+  HtoL_away_OTU = group_otu_abun[, HtoL_away]
+  HtoL_away_OTU <- HtoL_away_OTU[rowSums(HtoL_away_OTU)>0,]
+  #### away sample( M -> L)
+  MtoL_away = c((subset(select_data, type == "M_L"))$Sample_ID)
+  MtoL_away_OTU = group_otu_abun[, MtoL_away]
+  MtoL_away_OTU <- MtoL_away_OTU[rowSums(MtoL_away_OTU)>0,]
+  #### 
+  ### low
+  sample_low = unique(c(L_L_L_home, LtoM_away, LtoH_away))
+  sample_low_OTU = group_otu_abun[, sample_low]
+  sample_low_nohome = unique(c(LtoM_away, LtoH_away))
+  sample_low_nohome_OTU = group_otu_abun[, sample_low_nohome]
+  
+  # Calculate the number of samples for each group
+  half_L_L_L_home <- length(L_L_L_home)
+  half_LtoM_away <- length(LtoM_away)
+  half_LtoH_away <- length(LtoH_away)
+  # Keep the OTU that appears in all samples in L_L_L_home
+  L_L_L_home_OTU <- rownames(sample_low_OTU)[rowSums(sample_low_OTU[, L_L_L_home] > 0) >= half_L_L_L_home]
+  # Keep the OTU that appears in all samples in L to M_away
+  LtoM_away_OTU <- rownames(group_otu_abun[, LtoM_away])[rowSums(group_otu_abun[, LtoM_away] > 0) >= half_LtoM_away]
+  # Keep the OTU that appears in all samples in L to H_away
+  LtoH_away_OTU <- rownames(group_otu_abun[, LtoH_away])[rowSums(group_otu_abun[, LtoH_away] > 0) >= half_LtoH_away]
+  # Find the OTU shared by the three groups
+  common_OTUs <- Reduce(intersect, list(L_L_L_home_OTU, LtoM_away_OTU, LtoH_away_OTU))
+  
+  # Get the data of the shared OTUs
+  sample_low_home_OTU <- sample_low_nohome_OTU[common_OTUs, ]####HOME_OTU_LOW
+  sample_low_away_OTU <- sample_low_nohome_OTU[setdiff(rownames(sample_low_nohome_OTU), rownames(sample_low_home_OTU)), ]
+  sample_low_away_OTU <- sample_low_away_OTU[rowSums(sample_low_away_OTU) > 0, ]###AWAY_OTU_LOW
+  
+  ###middle
+  sample_mid = unique(c(M_M_M_home, MtoH_away, MtoL_away))
+  sample_mid_OTU = group_otu_abun[, sample_mid]
+  sample_mid_nohome = unique(c(MtoH_away, MtoL_away))
+  sample_mid_nohome_OTU = group_otu_abun[, sample_mid_nohome]
+  
+  # Calculate the number of samples for each group
+  half_M_M_M_home <- length(M_M_M_home)
+  half_MtoH_away <- length(MtoH_away)
+  half_MtoL_away <- length(MtoL_away)
+  # Keep the OTU that appears in all samples in M_M_M_home
+  M_M_M_home_OTU <- rownames(sample_mid_OTU)[rowSums(sample_mid_OTU[, M_M_M_home] > 0) >= half_M_M_M_home]
+  # Keep the OTU that appears in all samples in M to H_away 
+  MtoH_away_OTU <- rownames(group_otu_abun[, MtoH_away])[rowSums(group_otu_abun[, MtoH_away] > 0) >= half_MtoH_away]
+  # Keep the OTU that appears in all samples in M to L_away
+  LtoH_away_OTU <- rownames(group_otu_abun[, MtoL_away])[rowSums(group_otu_abun[, MtoL_away] > 0) >= half_MtoL_away]
+  # Find the OTU shared by the three groups
+  common_OTUs <- Reduce(intersect, list(M_M_M_home_OTU, MtoH_away_OTU, LtoH_away_OTU))
+  
+  # Get the data of the shared OTUs
+  sample_mid_home_OTU <- sample_mid_nohome_OTU[common_OTUs,]####HOME_OTU_MID
+  sample_mid_away_OTU <- sample_mid_nohome_OTU[setdiff(rownames(sample_mid_nohome_OTU), rownames(sample_mid_home_OTU)), ]
+  sample_mid_away_OTU <- sample_mid_away_OTU[rowSums(sample_mid_away_OTU) > 0, ]###AWAY_OTU_MID
+  
+  ### high
+  sample_high = unique(c(H_H_H_home, HtoL_away, HtoM_away))
+  sample_high_OTU = group_otu_abun[, sample_high]
+  sample_high_nohome = unique(c(HtoL_away, HtoM_away))
+  sample_high_nohome_OTU = group_otu_abun[, sample_high_nohome]
+  
+  # Calculate the number of samples for each group
+  half_H_H_H_home <- length(M_M_M_home)
+  half_HtoL_away <- length(HtoL_away)
+  half_HtoM_away <- length(HtoM_away)
+  # Keep the OTU that appears in all samples in H_H_H_home 
+  H_H_H_home_OTU <- rownames(sample_high_OTU)[rowSums(sample_high_OTU[, H_H_H_home] > 0) >= half_H_H_H_home]
+  sample_high_nohome_OTU[H_H_H_home_OTU,]
+  #Keep the OTU that appears in all samples in H to L_away 
+  HtoL_away_OTU <- rownames(group_otu_abun[, HtoL_away])[rowSums(group_otu_abun[, HtoL_away] > 0) >= half_HtoL_away]
+  #Keep the OTU that appears in all samples in H to M_away
+  HtoM_away_OTU <- rownames(group_otu_abun[, HtoM_away])[rowSums(group_otu_abun[, HtoM_away] > 0) >= half_HtoM_away]
+  # Find the OTU shared by the three groups
+  common_OTUs <- Reduce(intersect, list(H_H_H_home_OTU, HtoL_away_OTU, HtoM_away_OTU))
+  
+  # Get the data of the shared OTUs
+  sample_high_home_OTU <- sample_high_nohome_OTU[common_OTUs,]
+  sample_high_away_OTU <- sample_high_nohome_OTU[setdiff(rownames(sample_high_nohome_OTU), rownames(sample_high_home_OTU)), ]
+  sample_high_away_OTU <- sample_high_away_OTU[rowSums(sample_high_away_OTU) > 0, ]
+  
+  home_OTU_low_mid <- merge_otu_data(sample_low_home_OTU, sample_mid_home_OTU)
+  home_OTU <- merge_otu_data(home_OTU_low_mid, sample_high_home_OTU)
+  
+  away_OTU_low_mid <- merge_otu_data(sample_low_away_OTU, sample_mid_away_OTU)
+  away_OTU <- merge_otu_data(home_OTU_low_mid, sample_high_away_OTU)
+  
+  final_results_list[[paste("home_OTU", i, sep = "_")]] <- home_OTU
+  final_results_list[[paste("away_OTU", i, sep = "_")]] <- away_OTU
+}
+final_results_list
+observed_species_fnil <- colSums(final_results_list$`home_OTU_F. nilgerrensis` > 0)
+observed_species_pasi <- colSums(final_results_list$`home_OTU_P. asiatica` > 0)
+observed_species_trep <- colSums(final_results_list$`home_OTU_T. repens` > 0)
+
+###entire rhizosphere / phyllosphere
+bacteria_OTU_abun = read.xlsx("D:/桌面/paper2/analysis2/translocation.xlsx", sheet = "rhizosphere", rowNames = T, colNames = T)
+#bacteria_OTU_abun = read.xlsx("D:/桌面/paper2/analysis2/translocation.xlsx", sheet = "phyllosphere", rowNames = T, colNames = T)
+
+Species = unique(OTU_group$Species); Species
+Scenario = unique(subset(OTU_group, Soilsource == "Home" & Time == "Aug")$type); Scenario
+#i = "P. asiatica"
+
+#### leaf_OTU_abun / bacteria_OTU_abun
+group_otu_abun = bacteria_OTU_abun
+
+####wunifrac distance is performed on each table
+tree = read.tree("bacterial.nwk")
+result = data.frame()
+
+for (i in Species) {
+  select_data = subset(OTU_group, Species == i & Time == "Aug")
+  select_data_nohome = subset(select_data, type != "L_L" & type != "M_M" & type != "H_H")
+  select_data_nohome_OTU = group_otu_abun[, rownames(select_data_nohome)]
+  select_data_nohome_OTU <- select_data_nohome_OTU[rowSums(select_data_nohome_OTU)>0,]
+  overall <- decostand(data.frame(t(select_data_nohome_OTU)),method = "hellinger")
+  overall_tree1 <- prune.sample(overall,tree)
+  overall_unifrac <- phyloseq::phyloseq(otu_table(t(overall),taxa_are_rows = T),phy_tree(overall_tree1))#create phyloeq index
+  overall_wunifrac <- distance(overall_unifrac,method = "wunifrac")
+  pcoa <- cmdscale(overall_wunifrac, k = 2, eig = TRUE)
+  poi <- pcoa$points
+  eigval <- pcoa$eig
+  pcoa_eig <- (pcoa$eig)[1:2]/sum(pcoa$eig)
+  pcoa_eig <- round(pcoa_eig, 3)
+  pcoa <- as.data.frame(poi)
+  names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+  pcoa$ID <- rownames(pcoa)
+  pcoa$SampleID <- i
+  result <- rbind(result,pcoa)
+}
+result
+
+###This parameter matches rgr
+rgr = read.xlsx("trans_field.xlsx", sheet = "RGR", rowNames = T, colNames = T)
+rgr$type = paste(rgr$site, rgr$popu, rgr$soil, sep = "_")
+rgr$ID <- rownames(rgr)
+result_pcoa_group <- left_join(result,rgr[,c(13,14)],by = "ID")
+result_pcoa_mean <- aggregate(cbind(PCoA1, PCoA2) ~ SampleID + type, result_pcoa_group, FUN = mean)
+#write.table(result_pcoa_group, file ="result_pcoa_mean.csv",sep =",", quote =FALSE)
+
+####################Differential expression analysis###############
+library(tidyverse)
+library(edgeR)
+total <- read.xlsx("shared_field.xlsx", sheet = "shared",colNames = T, rowNames = T)
+field_group <- read.xlsx("shared_field.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1 <- subset(field_group, species == "F")
+total_core_otu <- total[,colnames(total) %in% rownames(group1),]
+total_core_otu <- total_core_otu[rowSums(total_core_otu) != 0, ]
+dev.new()
+
+group = factor((subset(field_group, species == "F" ))$compartment, levels = c("L","S"))
+group
+dgelist <- DGEList(counts = total_core_otu, group = group)
+keep <- rowSums(cpm(dgelist) > 1 ) >= 2
+dgelist <- dgelist[keep, , keep.lib.sizes = FALSE]
+dgelist_norm <- calcNormFactors(dgelist, method = 'TMM')
+design <- model.matrix(~group)
+dge <- estimateDisp(dgelist_norm, design, robust = TRUE)
+fit <- glmFit(dge, design, robust = TRUE)
+lrt <- topTags(glmLRT(fit), n = nrow(dgelist$counts))
+lrt<-lrt$table
+edgeR_diff <- lrt[order(lrt$FDR, lrt$logFC, decreasing = c(FALSE, TRUE)), ]
+edgeR_diff[which(edgeR_diff$logFC >= 1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in root (169)'
+edgeR_diff[which(edgeR_diff$logFC <= -1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in leaf (614)'
+edgeR_diff[which(abs(edgeR_diff$logFC) <= 1 | edgeR_diff$FDR >= 0.05),'sig'] <- 'Non-significant'
+
+filter_up <- subset(edgeR_diff, FDR < 0.05 & logFC >= 1)
+filter_down <- subset(edgeR_diff, FDR < 0.05 & logFC <= -1)
+print(paste('Rich in soil: ', nrow(filter_up)))
+print(paste('Rich in leaf: ', nrow(filter_down)))
+edgeR_diff <- edgeR_diff %>%
+  mutate(otu = str_replace(otu, "_", " "),
+         group_OTU = rownames(edgeR_diff),
+         otu2 = otu) 
+str(edgeR_diff)
+edgeR_diff$group_OTU = as.factor(edgeR_diff$group_OTU)
+edgeR_diff$sig = as.factor(edgeR_diff$sig)
+df2 = (edgeR_diff %>% arrange(desc(logFC)))[c(1:5),]
+df3 = (edgeR_diff %>% arrange(logFC))[c(1:5),]
+
+p1 <- ggplot(edgeR_diff, aes(logFC, -log(FDR, 10), color = sig)) +#, shape = group_OTU
+  geom_point(size=1, pch = 21)+ 
+  scale_color_manual(values = c('Rich in leaf (614)' = "#108b96", 'Non-significant' ='gray40', 'Rich in root (169)' = "#7A8234")) +
+  theme_bw()+
+  theme(panel.grid = element_blank(), panel.background = element_blank(), plot.title = element_text(size = 12), 
+        axis.ticks.y = element_line(), axis.line.y = element_line(),axis.line.x = element_line(color = 'black'),
+        axis.text.y = element_text(size = 10,angle = 0, colour = "black"),
+        axis.text.x = element_text(size = 10,angle = 0, colour = "black"),
+        axis.title.y=element_text(size = 12),
+        axis.title.x=element_text(size = 12),
+        legend.position = "none",
+        #plot.margin = unit(c(1, 3, 1, 3), "lines"),
+        #legend.position = c(0.8,0.9),legend.title = element_blank(),legend.text = element_text(size = 8),
+        legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent')) +
+  geom_vline(xintercept = c(-1, 1), color = 'gray', linewidth = 0.25, linetype = 2) + 
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', linewidth = 0.25, linetype = 2) +
+  labs(x = expression(Log[2]~(Fold~change)),y = expression(-Log[10]~(P-value)), color = NA)
+p1
+dev.off()
+
+group1 <- subset(field_group, species == "P")
+total_core_otu <- total[,colnames(total) %in% rownames(group1),]
+total_core_otu <- total_core_otu[rowSums(total_core_otu) != 0, ]
+dev.new()
+library("edgeR")
+group = factor((subset(field_group, species == "P" ))$compartment, levels = c("L","S"))
+group
+dgelist <- DGEList(counts = total_core_otu, group = group)
+keep <- rowSums(cpm(dgelist) > 1 ) >= 2
+dgelist <- dgelist[keep, , keep.lib.sizes = FALSE]
+dgelist_norm <- calcNormFactors(dgelist, method = 'TMM')
+design <- model.matrix(~group)
+dge <- estimateDisp(dgelist_norm, design, robust = TRUE)
+fit <- glmFit(dge, design, robust = TRUE)
+lrt <- topTags(glmLRT(fit), n = nrow(dgelist$counts))
+lrt<-lrt$table
+edgeR_diff <- lrt[order(lrt$FDR, lrt$logFC, decreasing = c(FALSE, TRUE)), ]
+edgeR_diff[which(edgeR_diff$logFC >= 1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in root (130)'
+edgeR_diff[which(edgeR_diff$logFC <= -1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in leaf (542)'
+edgeR_diff[which(abs(edgeR_diff$logFC) <= 1 | edgeR_diff$FDR >= 0.05),'sig'] <- 'Non-significant'
+
+filter_up <- subset(edgeR_diff, FDR < 0.05 & logFC >= 1)
+filter_down <- subset(edgeR_diff, FDR < 0.05 & logFC <= -1)
+print(paste('Rich in root: ', nrow(filter_up)))
+print(paste('Rich in leaf: ', nrow(filter_down)))
+edgeR_diff <- edgeR_diff %>%
+  mutate(otu = str_replace(otu, "_", " "),
+         group_OTU = rownames(edgeR_diff),
+         otu2 = otu) 
+str(edgeR_diff)
+edgeR_diff$group_OTU = as.factor(edgeR_diff$group_OTU)
+edgeR_diff$sig = as.factor(edgeR_diff$sig)
+df2 = (edgeR_diff %>% arrange(desc(logFC)))[c(1:5),]
+df3 = (edgeR_diff %>% arrange(logFC))[c(1:5),]
+p2 <- ggplot(edgeR_diff, aes(logFC, -log(FDR, 10), color = sig)) +#, shape = group_OTU
+  geom_point(size=1, pch = 21)+ 
+  scale_color_manual(values = c('Rich in leaf (542)' = "#108b96", 'Non-significant' ='gray40', 'Rich in root (130)' = "#7A8234")) +
+  theme_bw()+
+  theme(panel.grid = element_blank(), panel.background = element_blank(), plot.title = element_text(size = 12), 
+        axis.ticks.y = element_line(), axis.line.y = element_line(),axis.line.x = element_line(color = 'black'),
+        axis.text.y = element_text(size = 10,angle = 0, colour = "black"),
+        axis.text.x = element_text(size = 10,angle = 0, colour = "black"),
+        axis.title.y=element_text(size = 12),
+        axis.title.x=element_text(size = 12),
+        legend.position = "none",
+        #plot.margin = unit(c(1, 3, 1, 3), "lines"),
+        #legend.position = c(0.8,0.9),legend.title = element_blank(),legend.text = element_text(size = 8),
+        legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent')) +
+  geom_vline(xintercept = c(-1, 1), color = 'gray', linewidth = 0.25, linetype = 2) + 
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', linewidth = 0.25, linetype = 2) +
+  labs(x = expression(Log[2]~(Fold~change)),y = expression(-Log[10]~(P-value)), color = NA)
+p2
+dev.off()
+
+group1 <- subset(field_group, species == "T")
+total_core_otu <- total[,colnames(total) %in% rownames(group1),]
+total_core_otu <- total_core_otu[rowSums(total_core_otu) != 0, ]
+dev.new()
+library("edgeR")
+group = factor((subset(field_group, species == "T" ))$compartment, levels = c("L","S"))
+group
+dgelist <- DGEList(counts = total_core_otu, group = group)
+keep <- rowSums(cpm(dgelist) > 1 ) >= 2
+dgelist_norm <- calcNormFactors(dgelist, method = 'TMM')
+design <- model.matrix(~group)
+dge <- estimateDisp(dgelist_norm, design, robust = TRUE)
+fit <- glmFit(dge, design, robust = TRUE)
+lrt <- topTags(glmLRT(fit), n = nrow(dgelist$counts))
+lrt<-lrt$table
+edgeR_diff <- lrt[order(lrt$FDR, lrt$logFC, decreasing = c(FALSE, TRUE)), ]
+edgeR_diff[which(edgeR_diff$logFC >= 1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in root (147)'
+edgeR_diff[which(edgeR_diff$logFC <= -1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in leaf (408)'
+edgeR_diff[which(abs(edgeR_diff$logFC) <= 1 | edgeR_diff$FDR >= 0.05),'sig'] <- 'Non-significant'
+
+filter_up <- subset(edgeR_diff, FDR < 0.05 & logFC >= 1)
+filter_down <- subset(edgeR_diff, FDR < 0.05 & logFC <= -1)
+print(paste('Rich in root: ', nrow(filter_up)))
+print(paste('Rich in leaf: ', nrow(filter_down)))
+edgeR_diff <- edgeR_diff %>%
+  mutate(otu = str_replace(otu, "_", " "),
+         group_OTU = rownames(edgeR_diff),
+         otu2 = otu) 
+str(edgeR_diff)
+edgeR_diff$group_OTU = as.factor(edgeR_diff$group_OTU)
+edgeR_diff$sig = as.factor(edgeR_diff$sig)
+df2 = (edgeR_diff %>% arrange(desc(logFC)))[c(1:5),]
+df3 = (edgeR_diff %>% arrange(logFC))[c(1:5),]
+p3 <- ggplot(edgeR_diff, aes(logFC, -log(FDR, 10), color = sig)) +#, shape = group_OTU
+  geom_point(size=1, pch = 21)+ 
+  scale_color_manual(values = c('Rich in leaf (408)' = "#108b96", 'Non-significant' ='gray40', 'Rich in root (147)' = "#7A8234")) +
+  theme_bw()+
+  theme(panel.grid = element_blank(), panel.background = element_blank(), plot.title = element_text(size = 12), 
+        axis.ticks.y = element_line(), axis.line.y = element_line(),axis.line.x = element_line(color = 'black'),
+        axis.text.y = element_text(size = 10,angle = 0, colour = "black"),
+        axis.text.x = element_text(size = 10,angle = 0, colour = "black"),
+        axis.title.y=element_text(size = 12),
+        axis.title.x=element_text(size = 12),
+        legend.position = "none",
+        #plot.margin = unit(c(1, 3, 1, 3), "lines"),
+        #legend.position = c(0.8,0.9),legend.title = element_blank(),legend.text = element_text(size = 8),
+        legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent')) +
+  geom_vline(xintercept = c(-1, 1), color = 'gray', linewidth = 0.25, linetype = 2) + 
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', linewidth = 0.25, linetype = 2) +
+  labs(x = expression(Log[2]~(Fold~change)),y = expression(-Log[10]~(P-value)), color = NA)
+p3
+dev.off()
+
+#####transpltation
+total <- read.xlsx("shared_trans.xlsx", sheet = "shared",colNames = T, rowNames = T)
+
+field_group <- read.xlsx("shared_trans.xlsx", sheet = "group",colNames = T, rowNames = T)
+group1 <- subset(field_group, species == "F")
+total_core_otu <- total[,colnames(total) %in% rownames(group1),]
+total_core_otu <- total_core_otu[rowSums(total_core_otu) != 0, ]
+dev.new()
+library("edgeR")
+group = factor((subset(field_group, species == "F" ))$compartment, levels = c("L","S"))
+group
+dgelist <- DGEList(counts = total_core_otu, group = group)
+keep <- rowSums(cpm(dgelist) > 1 ) >= 2
+dgelist <- dgelist[keep, , keep.lib.sizes = FALSE]
+dgelist_norm <- calcNormFactors(dgelist, method = 'TMM')
+design <- model.matrix(~group)
+dge <- estimateDisp(dgelist_norm, design, robust = TRUE)
+fit <- glmFit(dge, design, robust = TRUE)
+lrt <- topTags(glmLRT(fit), n = nrow(dgelist$counts))
+lrt<-lrt$table
+edgeR_diff <- lrt[order(lrt$FDR, lrt$logFC, decreasing = c(FALSE, TRUE)), ]
+edgeR_diff[which(edgeR_diff$logFC >= 1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in root (15)'
+edgeR_diff[which(edgeR_diff$logFC <= -1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in leaf (43)'
+edgeR_diff[which(abs(edgeR_diff$logFC) <= 1 | edgeR_diff$FDR >= 0.05),'sig'] <- 'Non-significant'
+
+filter_up <- subset(edgeR_diff, FDR < 0.05 & logFC >= 1)
+filter_down <- subset(edgeR_diff, FDR < 0.05 & logFC <= -1)
+print(paste('Rich in soil: ', nrow(filter_up)))
+print(paste('Rich in leaf: ', nrow(filter_down)))
+edgeR_diff <- edgeR_diff %>%
+  mutate(otu = str_replace(otu, "_", " "),
+         group_OTU = rownames(edgeR_diff),
+         otu2 = otu) 
+str(edgeR_diff)
+edgeR_diff$group_OTU = as.factor(edgeR_diff$group_OTU)
+edgeR_diff$sig = as.factor(edgeR_diff$sig)
+df2 = (edgeR_diff %>% arrange(desc(logFC)))[c(1:5),]
+df3 = (edgeR_diff %>% arrange(logFC))[c(1:5),]
+
+p4 <- ggplot(edgeR_diff, aes(logFC, -log(FDR, 10), color = sig)) +#, shape = group_OTU
+  geom_point(size=1, pch = 21)+ 
+  scale_color_manual(values = c('Rich in leaf (43)' = "#108b96", 'Non-significant' ='gray40', 'Rich in root (15)' = "#7A8234")) +
+  theme_bw()+
+  theme(panel.grid = element_blank(), panel.background = element_blank(), plot.title = element_text(size = 12), 
+        axis.ticks.y = element_line(), axis.line.y = element_line(),axis.line.x = element_line(color = 'black'),
+        axis.text.y = element_text(size = 10,angle = 0, colour = "black"),
+        axis.text.x = element_text(size = 10,angle = 0, colour = "black"),
+        axis.title.y=element_text(size = 12),
+        axis.title.x=element_text(size = 12),
+        legend.position = "none",
+        #plot.margin = unit(c(1, 3, 1, 3), "lines"),
+        #legend.position = c(0.8,0.9),legend.title = element_blank(),legend.text = element_text(size = 8),
+        legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent')) +
+  geom_vline(xintercept = c(-1, 1), color = 'gray', linewidth = 0.25, linetype = 2) + 
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', linewidth = 0.25, linetype = 2) +
+  labs(x = expression(Log[2]~(Fold~change)),y = expression(-Log[10]~(P-value)), color = NA)
+p4
+dev.off()
+
+group1 <- subset(field_group, species == "P")
+total_core_otu <- total[,colnames(total) %in% rownames(group1),]
+total_core_otu <- total_core_otu[rowSums(total_core_otu) != 0, ]
+dev.new()
+library("edgeR")
+group = factor((subset(field_group, species == "P" ))$compartment, levels = c("L","S"))
+group
+dgelist <- DGEList(counts = total_core_otu, group = group)
+keep <- rowSums(cpm(dgelist) > 1 ) >= 2
+dgelist <- dgelist[keep, , keep.lib.sizes = FALSE]
+dgelist_norm <- calcNormFactors(dgelist, method = 'TMM')
+design <- model.matrix(~group)
+dge <- estimateDisp(dgelist_norm, design, robust = TRUE)
+fit <- glmFit(dge, design, robust = TRUE)
+lrt <- topTags(glmLRT(fit), n = nrow(dgelist$counts))
+lrt<-lrt$table
+edgeR_diff <- lrt[order(lrt$FDR, lrt$logFC, decreasing = c(FALSE, TRUE)), ]
+edgeR_diff[which(edgeR_diff$logFC >= 1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in root (27)'
+edgeR_diff[which(edgeR_diff$logFC <= -1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in leaf (98)'
+edgeR_diff[which(abs(edgeR_diff$logFC) <= 1 | edgeR_diff$FDR >= 0.05),'sig'] <- 'Non-significant'
+
+filter_up <- subset(edgeR_diff, FDR < 0.05 & logFC >= 1)
+filter_down <- subset(edgeR_diff, FDR < 0.05 & logFC <= -1)
+print(paste('Rich in root: ', nrow(filter_up)))
+print(paste('Rich in leaf: ', nrow(filter_down)))
+edgeR_diff <- edgeR_diff %>%
+  mutate(otu = str_replace(otu, "_", " "),
+         group_OTU = rownames(edgeR_diff),
+         otu2 = otu) 
+str(edgeR_diff)
+edgeR_diff$group_OTU = as.factor(edgeR_diff$group_OTU)
+edgeR_diff$sig = as.factor(edgeR_diff$sig)
+df2 = (edgeR_diff %>% arrange(desc(logFC)))[c(1:5),]
+df3 = (edgeR_diff %>% arrange(logFC))[c(1:5),]
+p5 <- ggplot(edgeR_diff, aes(logFC, -log(FDR, 10), color = sig)) +#, shape = group_OTU
+  geom_point(size=1, pch = 21)+ 
+  scale_color_manual(values = c('Rich in leaf (98)' = "#108b96", 'Non-significant' ='gray40', 'Rich in root (27)' = "#7A8234")) +
+  theme_bw()+
+  theme(panel.grid = element_blank(), panel.background = element_blank(), plot.title = element_text(size = 12), 
+        axis.ticks.y = element_line(), axis.line.y = element_line(),axis.line.x = element_line(color = 'black'),
+        axis.text.y = element_text(size = 10,angle = 0, colour = "black"),
+        axis.text.x = element_text(size = 10,angle = 0, colour = "black"),
+        axis.title.y=element_text(size = 12),
+        axis.title.x=element_text(size = 12),
+        legend.position = "none",
+        #plot.margin = unit(c(1, 3, 1, 3), "lines"),
+        #legend.position = c(0.8,0.9),legend.title = element_blank(),legend.text = element_text(size = 8),
+        legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent')) +
+  geom_vline(xintercept = c(-1, 1), color = 'gray', linewidth = 0.25, linetype = 2) + 
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', linewidth = 0.25, linetype = 2) +
+  labs(x = expression(Log[2]~(Fold~change)),y = expression(-Log[10]~(P-value)), color = NA)
+p5
+dev.off()
+
+group1 <- subset(field_group, species == "T")
+total_core_otu <- total[,colnames(total) %in% rownames(group1),]
+total_core_otu <- total_core_otu[rowSums(total_core_otu) != 0, ]
+dev.new()
+library("edgeR")
+group = factor((subset(field_group, species == "T" ))$compartment, levels = c("L","S"))
+group
+dgelist <- DGEList(counts = total_core_otu, group = group)
+keep <- rowSums(cpm(dgelist) > 1 ) >= 2
+dgelist_norm <- calcNormFactors(dgelist, method = 'TMM')
+design <- model.matrix(~group)
+dge <- estimateDisp(dgelist_norm, design, robust = TRUE)
+fit <- glmFit(dge, design, robust = TRUE)
+lrt <- topTags(glmLRT(fit), n = nrow(dgelist$counts))
+lrt<-lrt$table
+edgeR_diff <- lrt[order(lrt$FDR, lrt$logFC, decreasing = c(FALSE, TRUE)), ]
+edgeR_diff[which(edgeR_diff$logFC >= 1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in root (41)'
+edgeR_diff[which(edgeR_diff$logFC <= -1 & edgeR_diff$FDR < 0.05),'sig'] <- 'Rich in leaf (187)'
+edgeR_diff[which(abs(edgeR_diff$logFC) <= 1 | edgeR_diff$FDR >= 0.05),'sig'] <- 'Non-significant'
+
+filter_up <- subset(edgeR_diff, FDR < 0.05 & logFC >= 1)调
+filter_down <- subset(edgeR_diff, FDR < 0.05 & logFC <= -1)
+print(paste('Rich in root: ', nrow(filter_up)))
+print(paste('Rich in leaf: ', nrow(filter_down)))
+edgeR_diff <- edgeR_diff %>%
+  mutate(otu = str_replace(otu, "_", " "),
+         group_OTU = rownames(edgeR_diff),
+         otu2 = otu) 
+str(edgeR_diff)
+edgeR_diff$group_OTU = as.factor(edgeR_diff$group_OTU)
+edgeR_diff$sig = as.factor(edgeR_diff$sig)
+df2 = (edgeR_diff %>% arrange(desc(logFC)))[c(1:5),]
+df3 = (edgeR_diff %>% arrange(logFC))[c(1:5),]
+p6 <- ggplot(edgeR_diff, aes(logFC, -log(FDR, 10), color = sig)) +#, shape = group_OTU
+  geom_point(size=1, pch = 21)+ 
+  scale_color_manual(values = c('Rich in leaf (187)' = "#108b96", 'Non-significant' ='gray40', 'Rich in root (41)' = "#7A8234")) +
+  theme_bw()+
+  theme(panel.grid = element_blank(), panel.background = element_blank(), plot.title = element_text(size = 12), 
+        axis.ticks.y = element_line(), axis.line.y = element_line(),axis.line.x = element_line(color = 'black'),
+        axis.text.y = element_text(size = 10,angle = 0, colour = "black"),
+        axis.text.x = element_text(size = 10,angle = 0, colour = "black"),
+        axis.title.y=element_text(size = 12),
+        axis.title.x=element_text(size = 12),
+        legend.position = "none",
+        #plot.margin = unit(c(1, 3, 1, 3), "lines"),
+        #legend.position = c(0.8,0.9),legend.title = element_blank(),legend.text = element_text(size = 8),
+        legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent')) +
+  geom_vline(xintercept = c(-1, 1), color = 'gray', linewidth = 0.25, linetype = 2) + 
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', linewidth = 0.25, linetype = 2) +
+  labs(x = expression(Log[2]~(Fold~change)),y = expression(-Log[10]~(P-value)), color = NA)
+p6
+dev.off()
+library(patchwork)
+p <- p1 + p2 + p3 + p4 + p5 + p6 + p4 + p5 + p6 +
+  plot_layout(ncol = 3, nrow = 3)
+p
+
+##############Multiple regression models of different soils in transplanting plots############
+options(na.action ="na.fail")
+group = read.xlsx("trans_field.xlsx", sheet = "entire_sample", rowNames = T, colNames = T)
+group$type = paste0(group$site,"_",group$popu)
+#group$type1 = paste0(group$site,"_",group$popu,"_",group$soil)
+#group <- subset(group, type1 != "L_L_L" & type1 != "M_M_M" & type1 !="H_H_H")
+group <- subset(group, type != "L_L" & type != "M_M" & type != "H_H")
+colnames(group)
+###standardized data
+####F. nilgerrensis
+dataF <- subset(group,Species == "F. nilgerrensis")
+dataF[,c(13:23)] <- scale(dataF[,c(13:23)])
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataF)###full model
+vif(fit)
+summary(fit)
+fit_select <- dredge(fit)
+head(fit_select)
+fit_select1 <- summary(get.models(fit_select, 6)[[1]])
+fit_select1
+best_est<-model.avg(fit_select,subset= delta <2, revised.var = TRUE)
+summary(best_est)
+sw(best_est)
+best_model <- lm(RGR~Rich_phyllo,data=dataF)###best model
+vif(best_model)
+summary(best_model)
+glmm.hp(best_model,type = "R2")
+
+get.data = get_model_data(best_model, type = "pred", terms = "Rich_phyllo [all]")
+get.data = as.data.frame(get.data); colnames(get.data)[1] = "Rich_phyllo"
+##### rotation
+get.data["Rich_phyllo_row"] <- (pd_attributes_variable$`scaled:center`["Rich_phyllo"] + pd_attributes_variable$`scaled:scale`["Rich_phyllo"]*get.data["Rich_phyllo"])
+dataF["Rich_phyllo_row"] <- (pd_attributes_variable$`scaled:center`["Rich_phyllo"] + pd_attributes_variable$`scaled:scale`["Rich_phyllo"]*dataF["Rich_phyllo"])
+
+ggplot(get.data, aes(x = Rich_phyllo_row, y = predicted)) +
+  geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="#6D6D67", alpha = I(0.2)) +
+  geom_line(size=1, linetype = 1, color = "#6D6D67") +
+  geom_point(dataF, mapping = aes(x = Rich_phyllo_row, y = RGR), color = "#6D6D67",size = 2,shape = 21) +
+  theme_bw()+
+  labs(x = "Rich_phyllo_row",y = "Growth rate (cm/day)", title = NULL) +
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p1; p1
+
+####P. asiatica
+dataP <- subset(group,Species == "P. asiatica")
+cor.test(dataP$Home_PCoA1,dataP$Rhizos_PCoA1)
+dataP[,c(13:23)] <- scale(dataP[,c(13:23)])
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataP)###full model
+vif(fit)
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA2,
+        data=dataP)###full model
+vif(fit)
+summary(fit)
+fit_select <- dredge(fit)
+head(fit_select)
+fit_select1 <- summary(get.models(fit_select, 2)[[1]])
+fit_select1
+best_est<-model.avg(fit_select,subset= delta <2, revised.var = TRUE)
+summary(best_est)
+sw(best_est)
+best_model <- lm(RGR~Rhizos_PCoA1+Rich_rhizos,data=dataP)###best model
+vif(best_model)
+summary(best_model)
+glmm.hp(best_model,type = "R2")
+
+get.data = get_model_data(best_model, type = "pred", terms = "Rhizos_PCoA1 [all]")
+get.data = as.data.frame(get.data); colnames(get.data)[1] = "Rhizos_PCoA1"
+##### 回转
+get.data["Rhizos_PCoA1_row"] <- (pd_attributes_variable$`scaled:center`["Rhizos_PCoA1"] + pd_attributes_variable$`scaled:scale`["Rhizos_PCoA1"]*get.data["Rhizos_PCoA1"])
+dataP["Rhizos_PCoA1_row"] <- (pd_attributes_variable$`scaled:center`["Rhizos_PCoA1"] + pd_attributes_variable$`scaled:scale`["Rhizos_PCoA1"]*dataP["Rhizos_PCoA1"])
+
+ggplot(get.data, aes(x = Rhizos_PCoA1_row, y = predicted)) +
+  geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="#F6B36F", alpha = I(0.2)) +
+  geom_line(size=1, linetype = 1, color = "#F6B36F") +
+  geom_point(dataP, mapping = aes(x = Rhizos_PCoA1_row, y = RGR), color = "#F6B36F",size = 2,shape = 21) +
+  theme_bw()+
+  labs(x = "Rhizos_PCoA1_row",y = "Growth rate (cm/day)", title = NULL) +
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p2; p2
+
+####T. repens
+dataT <- subset(group,Species == "T. repens")
+dataT[,c(13:23)] <- scale(dataT[,c(13:23)])
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataT)###full model
+vif(fit)
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA2,
+        data=dataT)###full model
+vif(fit)
+summary(fit)
+fit_select <- dredge(fit)
+head(fit_select)
+fit_select1 <- summary(get.models(fit_select, 2)[[1]])
+fit_select1
+best_est<-model.avg(fit_select,subset= delta <2, revised.var = TRUE)
+summary(best_est)
+sw(best_est)
+best_model <- lm(RGR~Rhizos_PCoA1+Rhizos_PCoA2+Rich_phyllo,data=dataT)###best model
+vif(best_model)
+summary(best_model)
+glmm.hp(best_model,type = "R2")
+
+get.data = get_model_data(best_model, type = "pred", terms = "Rhizos_PCoA2 [all]")
+get.data = as.data.frame(get.data); colnames(get.data)[1] = "Rhizos_PCoA2"
+
+get.data["Rhizos_PCoA2_row"] <- (pd_attributes_variable$`scaled:center`["Rhizos_PCoA2"] + pd_attributes_variable$`scaled:scale`["Rhizos_PCoA2"]*get.data["Rhizos_PCoA2"])
+dataT["Rhizos_PCoA2_row"] <- (pd_attributes_variable$`scaled:center`["Rhizos_PCoA2"] + pd_attributes_variable$`scaled:scale`["Rhizos_PCoA2"]*dataT["Rhizos_PCoA2"])
+
+ggplot(get.data, aes(x = Rhizos_PCoA2_row, y = predicted)) +
+  geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="#B84B24", alpha = I(0.2)) +
+  geom_line(size=1, linetype = 1, color = "#B84B24") +
+  geom_point(dataT, mapping = aes(x = Rhizos_PCoA2_row, y = RGR), color = "#B84B24",size = 2,shape = 21) +
+  theme_bw()+
+  labs(x = "Rhizos_PCoA2_row",y = "Growth rate (cm/day)", title = NULL) +
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p3; p3
+
+##############Multiple regression model of different soils in original plots############
+options(na.action ="na.fail")
+group = read.xlsx("trans_field.xlsx", sheet = "entire_sample", rowNames = T, colNames = T)
+group$type = paste0(group$site,"_",group$popu)
+#group$type1 = paste0(group$site,"_",group$popu,"_",group$soil)
+#group <- subset(group, type1 != "L_L_L" & type1 != "M_M_M" & type1 !="H_H_H")
+group <- subset(group, type == "L_L" | type == "M_M" | type =="H_H")
+colnames(group)
+###standardized data
+####F. nilgerrensis
+dataF <- subset(group,Species == "F. nilgerrensis")
+dataF[,c(13:23)] <- scale(dataF[,c(13:23)])
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataF)
+vif(fit)
+fit<-lm(RGR ~ Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataF)
+vif(fit)
+summary(fit)
+fit_select <- dredge(fit)
+head(fit_select)
+fit_select1 <- summary(get.models(fit_select, 5)[[1]])
+fit_select1
+best_est<-model.avg(fit_select,subset= delta <2, revised.var = TRUE)
+summary(best_est)
+sw(best_est)
+best_model <- lm(RGR~Rich_rhizos,data=dataF)
+vif(best_model)
+summary(best_model)
+glmm.hp(best_model,type = "R2")
+
+get.data = get_model_data(best_model, type = "pred", terms = "Rich_rhizos [all]")
+get.data = as.data.frame(get.data); colnames(get.data)[1] = "Rich_rhizos"
+##### rotation
+get.data["Rich_rhizos_row"] <- (pd_attributes_variable$`scaled:center`["Rich_rhizos"] + pd_attributes_variable$`scaled:scale`["Rich_rhizos"]*get.data["Rich_rhizos"])
+dataF["Rich_rhizos_row"] <- (pd_attributes_variable$`scaled:center`["Rich_rhizos"] + pd_attributes_variable$`scaled:scale`["Rich_rhizos"]*dataF["Rich_rhizos"])
+
+ggplot(get.data, aes(x = Rich_rhizos_row, y = predicted)) +
+  geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="#6D6D67", alpha = I(0.2)) +
+  geom_line(size=1, linetype = 1, color = "#6D6D67") +
+  geom_point(dataF, mapping = aes(x = Rich_rhizos_row, y = RGR), color = "#6D6D67",size = 2,shape = 21) +
+  theme_bw()+
+  labs(x = "Rich_rhizos_row",y = "Growth rate (cm/day)", title = NULL) +
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p4; p4
+
+####P. asiatica
+dataP <- subset(group,Species == "P. asiatica")
+dataP[,c(13:23)] <- scale(dataP[,c(13:23)])
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataP)
+vif(fit)
+fit<-lm(RGR ~ Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA1+Phyllo_PCoA2,
+        data=dataP)
+vif(fit)
+summary(fit)
+fit_select <- dredge(fit)
+head(fit_select)
+fit_select1 <- summary(get.models(fit_select, 3)[[1]])
+fit_select1
+best_est<-model.avg(fit_select,subset= delta <2, revised.var = TRUE)
+summary(best_est)
+sw(best_est)
+best_model <- lm(RGR~Rhizos_PCoA2,data=dataP)
+vif(best_model)
+summary(best_model)
+glmm.hp(best_model,type = "R2")
+
+get.data = get_model_data(best_model, type = "pred", terms = "Rich_rhizos [all]")
+get.data = as.data.frame(get.data); colnames(get.data)[1] = "Rich_rhizos"
+##### 
+get.data["Rich_rhizos_row"] <- (pd_attributes_variable$`scaled:center`["Rich_rhizos"] + pd_attributes_variable$`scaled:scale`["Rich_rhizos"]*get.data["Rich_rhizos"])
+dataP["Rich_rhizos_row"] <- (pd_attributes_variable$`scaled:center`["Rich_rhizos"] + pd_attributes_variable$`scaled:scale`["Rich_rhizos"]*dataP["Rich_rhizos"])
+
+ggplot(get.data, aes(x = Rich_rhizos_row, y = predicted)) +
+  geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="#F6B36F", alpha = I(0.2)) +
+  geom_line(size=1, linetype = 2, color = "#F6B36F") +
+  geom_point(dataP, mapping = aes(x = Rich_rhizos_row, y = RGR), color = "#F6B36F",size = 2,shape = 21) +
+  theme_bw()+
+  labs(x = "Rich_rhizos_row",y = "Growth rate (cm/day)", title = NULL) +
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p5; p5
+
+####T. repens
+dataT <- subset(group,Species == "T. repens")
+dataT[,c(13:23)] <- scale(dataT[,c(13:23)])
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+Phyllo_PCoA1+
+          Phyllo_PCoA2,
+        data=dataT)
+vif(fit)
+fit<-lm(RGR ~ Rich_phyllo+Rich_rhizos+Rhizos_PCoA1+Rhizos_PCoA2+
+          Phyllo_PCoA2,
+        data=dataT)
+vif(fit)
+summary(fit)
+fit_select <- dredge(fit)
+head(fit_select)
+fit_select1 <- summary(get.models(fit_select, 5)[[1]])
+fit_select1
+best_est<-model.avg(fit_select,subset= delta <2, revised.var = TRUE)
+summary(best_est)
+sw(best_est)
+best_model <- lm(RGR~Rich_rhizos,data=dataT)
+vif(best_model)
+summary(best_model)
+glmm.hp(best_model,type = "R2")
+
+ggplot(get.data, aes(x = Rich_rhizos_row, y = predicted)) +
+  geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="#B84B24", alpha = I(0.2)) +
+  geom_line(size=1, linetype = 1, color = "#B84B24") +
+  geom_point(dataT, mapping = aes(x = Rich_rhizos_row, y = RGR), color = "#B84B24",size = 2,shape = 21) +
+  theme_bw()+
+  labs(x = "Rich_rhizos_row",y = "Growth rate (cm/day)", title = NULL) +
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.position = "none",
+        axis.line=element_line(linetype=1,color="black",size=0.5),
+        axis.ticks=element_line(color="black",size=0.5,lineend = 2),
+        axis.text=element_text(colour='black',size=9),
+        axis.title=element_text(colour='black', size=10)) -> p6; p6
 
