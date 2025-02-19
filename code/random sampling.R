@@ -1,4 +1,4 @@
-###################随机抽样###################
+###################Random Sampling###################
 set.seed(123123)
 library(vegan)
 library(dplyr)
@@ -14,24 +14,24 @@ results <- data.frame(Species = character(),
                       Month = character(),
                       Significant_Count = integer(),
                       Non_Significant_Count = integer(),
-                      stringsAsFactors = FALSE)# 初始化结果
+                      stringsAsFactors = FALSE)
 
 for (Species in species_list) {
   for (Compartment in compartments) {
     for (Month in months) {
       compartment_data <- subset(group, species == Species & compartment == Compartment & month == Month)
       filtered_data <- ASV[, colnames(ASV) %in% rownames(compartment_data)]
-      otu_data <- filtered_data[rowSums(filtered_data > 0) > 0, ] # 删除行和为0的行
+      otu_data <- filtered_data[rowSums(filtered_data > 0) > 0, ] 
       
-      original_community <- as.matrix(otu_data)# 原始群落距离矩阵
-      dist_original <- as.matrix(vegdist(t(original_community), method = "bray")) # 转置以获得样本为行
+      original_community <- as.matrix(otu_data)
+      dist_original <- as.matrix(vegdist(t(original_community), method = "bray")) 
       
       n_samples <- 1000
       significant_results <- numeric(n_samples)
       
       n_otu <- ncol(otu_data)
       for (i in 1:n_samples) {
-        sampled_otu_indices <- sample(1:n_otu, size = n_otu, replace = TRUE)# 随机选择OTU列索引，与实际群落的OTU数一致
+        sampled_otu_indices <- sample(1:n_otu, size = n_otu, replace = TRUE)
         sampled_otu <- otu_data[, sampled_otu_indices]
         random_otu <- merge(otu_data, sampled_otu, by = "row.names", all = TRUE)
         rownames(random_otu) <- random_otu[,1]
@@ -39,7 +39,7 @@ for (Species in species_list) {
         random_otu[is.na(random_otu)] <- 0
         dist_random <- vegdist(t(random_otu), method = "bray")
         group1 <- factor(c(rep("Random", ncol(sampled_otu)), rep("Original", ncol(otu_data))))
-        # 进行 PERMANOVA 分析
+        # Perform PERMANOVA analysis
         permanova_result <- adonis2(dist_random ~ group1)
         permanova_result$`Pr(>F)`
         significant_results[i] <- ifelse(permanova_result$`Pr(>F)`[1] < 0.05, 1, 0)
@@ -53,7 +53,7 @@ for (Species in species_list) {
                                            Month = Month,
                                            Significant_Count = significant_count,
                                            Non_Significant_Count = non_significant_count,
-                                           stringsAsFactors = FALSE))# 存储结果
+                                           stringsAsFactors = FALSE))
     }
   }
 }
